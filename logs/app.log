@@ -1,0 +1,8 @@
+2025/06/14 07:25:50.913506 main.go:781: [ERROR] [open clock.png: no such file or directory reload clock png failed.]
+2025/06/14 07:25:50.913771 main.go:781: [ERROR] [open pomodoro.png: no such file or directory reload pomodoro png failed.]
+2025/06/14 07:25:50.913786 main.go:781: [ERROR] [open working.png: no such file or directory reload working png failed.]
+2025/06/14 07:25:50.913797 main.go:781: [ERROR] [open breaking.png: no such file or directory reload breaking png failed.]
+2025/06/14 07:25:50.913806 main.go:781: [ERROR] [open pause.png: no such file or directory reload pause png failed.]
+2025/06/14 07:27:47.781759 main.go:781: [ERROR] [open pomodoro.png: no such file or directory reload pomodoro png failed.]
+2025/06/14 07:28:26.618042 main.go:773: [INFO] [task record= {0 2025-06-14 2025-06-14 07:28:26.611936 +0800 CST m=+12.082671043 2025-06-14 07:28:26.617975 +0800 CST m=+12.088709793 1 pomodoro}]
+2025/06/14 07:28:54.548255 main.go:773: [INFO] [task record= {0 2025-06-14 2025-06-14 07:28:54.53757 +0800 CST m=+40.008113626 2025-06-14 07:28:54.54813 +0800 CST m=+40.018673751 1 pomodoro}]
