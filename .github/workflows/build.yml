@@ -62,28 +62,51 @@ jobs:
           </assembly>
           "@
           
-          # 转换 PNG 为 ICO (需要安装 ImageMagick)
-          choco install imagemagick -y
+          # 转换 PNG 为 ICO
+          choco install imagemagick -y --no-progress
           magick convert assets/logo.png -define icon:auto-resize=256,128,64,48,32,16 assets/logo.ico
 
       - name: Generate resource file
         run: |
-          # 确保使用绝对路径
-          $icoPath = Resolve-Path -Path "assets/logo.ico"
-          rsrc -manifest xtimer.manifest -ico "$icoPath" -o rsrc.syso
+          # 使用相对路径避免权限问题
+          rsrc -manifest xtimer.manifest -ico assets/logo.ico -o rsrc.syso
+          if (-not (Test-Path rsrc.syso)) { 
+            Write-Error "rsrc.syso not generated"
+            exit 1 
+          }
 
       - name: Build Windows executable
         run: |
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
           $env:CGO_ENABLED = "1"
-          # 添加 -tags=windows 确保嵌入资源
-          go build -tags=windows -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go
+          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go
 
       - name: Compress executable
         run: |
-          choco install upx -y
+          choco install upx -y --no-progress
           upx --best XTimer.exe
+
+      - name: Verify executable icon
+        run: |
+          # 使用可靠的图标验证方法
+          if (-not (Test-Path XTimer.exe)) { exit 1 }
+          
+          # 检查文件是否包含图标资源
+          Add-Type -AssemblyName System.Drawing
+          $exePath = Join-Path -Path $pwd -ChildPath "XTimer.exe"
+          try {
+            $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exePath)
+            if (-not $icon) {
+              Write-Error "No icon extracted from executable"
+              exit 1
+            }
+            Write-Output "Icon verification successful"
+          } catch {
+            Write-Error "Icon verification failed: $_"
+            exit 1
+          }
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -105,8 +128,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/XTimer-Windows/XTimer.exe
+          files: artifacts/XTimer-Windows/XTimer.exe
           tag_name: v1.0.0
           name: Release v1.0.0
           body: |
