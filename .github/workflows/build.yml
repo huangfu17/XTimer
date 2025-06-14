@@ -29,8 +29,8 @@ jobs:
 
       - name: Prepare resources
         run: |
-          # 创建包含图标声明的完整 manifest 文件
-          $manifestContent = @"
+          # 创建 manifest 文件
+          New-Item -Path xtimer.manifest -ItemType File -Value @"
           <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
           <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
             <assemblyIdentity 
@@ -52,45 +52,48 @@ jobs:
                 />
               </dependentAssembly>
             </dependency>
-            <iconManifest>
-              <icon ID="1" Path="assets/logo.ico" />
-            </iconManifest>
+            <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+              <security>
+                <requestedPrivileges>
+                  <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+                </requestedPrivileges>
+              </security>
+            </trustInfo>
           </assembly>
           "@
-          $manifestContent | Out-File -FilePath xtimer.manifest -Encoding UTF8
-          
-          # 确保 assets 目录存在
-          if (-not (Test-Path -Path assets)) {
-            New-Item -Path assets -ItemType Directory
-          }
           
           # 转换 PNG 为 ICO (需要安装 ImageMagick)
-          if (-not (Get-Command magick -ErrorAction SilentlyContinue)) {
-            choco install imagemagick -y
-          }
+          choco install imagemagick -y
           magick convert assets/logo.png -define icon:auto-resize=256,128,64,48,32,16 assets/logo.ico
-          
-          # 验证文件存在
-          Write-Host "Manifest file content:"
-          Get-Content -Path xtimer.manifest
-          Write-Host "Icon file exists: " (Test-Path -Path assets/logo.ico)
 
       - name: Generate resource file
-        run: rsrc -manifest xtimer.manifest -ico assets/logo.ico -o rsrc.syso
+        run: |
+          # 确保使用绝对路径
+          $icoPath = Resolve-Path -Path "assets/logo.ico"
+          rsrc -manifest xtimer.manifest -ico "$icoPath" -o rsrc.syso
 
       - name: Build Windows executable
         run: |
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
           $env:CGO_ENABLED = "1"
-          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go rsrc.syso  # 显式包含资源文件
+          # 添加 -tags=windows 确保嵌入资源
+          go build -tags=windows -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go
 
       - name: Compress executable
         run: |
-          if (-not (Get-Command upx -ErrorAction SilentlyContinue)) {
-            choco install upx -y
-          }
+          choco install upx -y
           upx --best XTimer.exe
+
+      - name: Verify executable icon
+        run: |
+          # 验证图标是否嵌入成功
+          if (-not (Test-Path XTimer.exe)) { exit 1 }
+          $fileInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo("$(Get-Location)\XTimer.exe")
+          if (-not $fileInfo.Icon) {
+            Write-Error "Icon not embedded in executable"
+            exit 1
+          }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -111,13 +114,12 @@ jobs:
           path: artifacts
 
       - name: Create release
-        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/XTimer-Windows/XTimer.exe
-          tag_name: v${{ github.run_number }}
-          name: Release v${{ github.run_number }}
+          tag_name: v1.0.0
+          name: Release v1.0.0
           body: |
             Pomodoro Timer Application
             - Windows: XTimer.exe
