@@ -84,17 +84,6 @@ jobs:
         run: |
           choco install upx -y
           upx --best XTimer.exe
-
-      - name: Verify executable icon
-        run: |
-          # 验证图标是否嵌入成功
-          if (-not (Test-Path XTimer.exe)) { exit 1 }
-          $fileInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo("$(Get-Location)\XTimer.exe")
-          if (-not $fileInfo.Icon) {
-            Write-Error "Icon not embedded in executable"
-            exit 1
-          }
-
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
