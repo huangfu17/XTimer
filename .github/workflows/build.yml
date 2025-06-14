@@ -1,6 +1,9 @@
-name: Build and Release
+name: Build and Release Pomodoro Timer
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -13,31 +16,99 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
 
-      - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: Install Fyne CLI and dependencies
+        run: |
+          # 安装 Fyne CLI
+          go install fyne.io/fyne/v2/cmd/fyne@latest
+          
+          # 验证安装
+          fyne version
+          
+          # 安装 ImageMagick（用于资源处理）
+          choco install imagemagick -y --no-progress
 
       - name: Bundle resources
         run: |
-          # 确保目录存在
-          mkdir -p bundled
+          # 创建目录（使用 PowerShell 语法）
+          New-Item -ItemType Directory -Force -Path bundled | Out-Null
           
-          # 使用 -name 参数导出变量
-          fyne bundle -o bundled/resources.go -pkg bundled -name Logo assets/Logo.png
-
+          # 验证资源文件存在
+          if (-not (Test-Path -Path "assets/Logo.png")) {
+            Write-Error "Logo.png not found in assets directory"
+            Get-ChildItem -Path assets
+            exit 1
+          }
+          
+          # 使用绝对路径避免权限问题
+          $logoPath = Resolve-Path -Path "assets/Logo.png"
+          
+          # 打包资源（添加详细输出）
+          Write-Output "Bundling resource: $logoPath"
+          fyne bundle -v -o bundled/resources.go -pkg bundled -name Logo $logoPath
           
           # 验证生成的文件
-          if [ ! -f "bundled/resources.go" ]; then
-            echo "❌ Resource bundle failed to generate"
+          if (-not (Test-Path -Path "bundled/resources.go")) {
+            Write-Error "Resource bundle failed to generate"
+            Get-ChildItem -Path bundled
             exit 1
-          fi
+          }
+          
+          Write-Output "Resource bundle generated successfully"
 
-      - name: Build application
+      - name: Generate Windows resources
         run: |
-          go build -o PomodoroTimer.exe .
+          # 生成 Windows 资源文件
+          fyne package -os windows -icon assets/Logo.png -appID "com.example.pomodoro"
+          
+          # 验证资源文件生成
+          if (-not (Test-Path -Path "fyne.syso")) {
+            Write-Error "Windows resource file not generated"
+            exit 1
+          }
 
-      - name: Upload artifact
+      - name: Build Windows executable
+        run: |
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          $env:CGO_ENABLED = "1"
+          
+          # 构建应用
+          go build -ldflags="-s -w -H=windowsgui" -o PomodoroTimer.exe .
+          
+          # 验证可执行文件
+          if (-not (Test-Path -Path "PomodoroTimer.exe")) {
+            Write-Error "Executable not built"
+            exit 1
+          }
+
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: PomodoroTimer-Windows
           path: PomodoroTimer.exe
+
+  release:
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PomodoroTimer-Windows
+          path: release
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/PomodoroTimer.exe
+          tag_name: v1.0.0
+          name: Release v1.0.0
+          body: |
+            Pomodoro Timer Application
+          draft: false
+          prerelease: false
