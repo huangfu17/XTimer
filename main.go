@@ -251,7 +251,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		),
 	)
 
-	p.total = time.Duration(p.setting.WorkTime) * time.Second
+	p.total = time.Duration(p.setting.WorkTime) * time.Minute
 	p.remaining = p.total
 
 	p.timeText = canvas.NewText(formatDuration(p.remaining), color.RGBA{R: 180, G: 30, B: 30, A: 255})
@@ -339,13 +339,13 @@ func (p *MyApp) startTimer() {
 	//init
 	if p.currentState == stateIdle {
 		if p.nextState == stateWorking {
-			p.total = time.Duration(p.setting.WorkTime) * time.Second
+			p.total = time.Duration(p.setting.WorkTime) * time.Minute
 			p.remaining = p.total
 			p.totalRunningTime = 0
 			p.startTime = time.Now()
 		}
 		if p.nextState == stateBreaking {
-			p.total = time.Duration(p.setting.WorkTime) * time.Second
+			p.total = time.Duration(p.setting.WorkTime) * time.Minute
 			p.remaining = p.total
 			p.totalRunningTime = 0
 			p.startTime = time.Now()
@@ -405,7 +405,7 @@ func (p *MyApp) resetTimer() {
 	p.pauseTimer()
 	p.transitionState(stateIdle)
 	p.nextState = stateWorking
-	p.total = time.Duration(p.setting.WorkTime) * time.Second
+	p.total = time.Duration(p.setting.WorkTime) * time.Minute
 	p.remaining = p.total
 	p.timeText.Text = formatDuration(p.remaining)
 	p.startBtn.SetText("开始")
@@ -421,13 +421,13 @@ func (p *MyApp) transitionState(newState state) {
 
 	switch newState {
 	case stateWorking:
-		p.total = time.Duration(p.setting.WorkTime) * time.Second
+		p.total = time.Duration(p.setting.WorkTime) * time.Minute
 		p.stateText.Text = "专注中..."
 		p.statImage.Resource = workingImage
 		//p.stateText.Color = theme.PrimaryColor()
 		p.stateText.Color = color.RGBA{R: 50, G: 120, B: 50, A: 255}
 	case stateBreaking:
-		p.total = time.Duration(p.setting.BreakTime) * time.Second
+		p.total = time.Duration(p.setting.BreakTime) * time.Minute
 		p.stateText.Text = "休息中..."
 		p.statImage.Resource = breakingImage
 		//p.stateText.Color = theme.PrimaryColor()
@@ -836,7 +836,7 @@ func (p *MyApp) playSoundWithBeep(filePath string) {
 	defer streamer.Close()
 
 	// 初始化扬声器
-	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/10))
+	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/5))
 
 	// 播放音频
 	done := make(chan bool)
