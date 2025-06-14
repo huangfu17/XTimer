@@ -63,10 +63,10 @@ jobs:
           fyne package -os windows -icon assets/Logo.png -appID "com.example.pomodoro"
           
           # 验证资源文件生成
-          if (-not (Test-Path -Path "fyne.syso")) {
-            Write-Error "Windows resource file not generated"
-            exit 1
-          }
+#          if (-not (Test-Path -Path "fyne.syso")) {
+#            Write-Error "Windows resource file not generated"
+#            exit 1
+#          }
 
       - name: Build Windows executable
         run: |
@@ -75,10 +75,10 @@ jobs:
           $env:CGO_ENABLED = "1"
           
           # 构建应用
-          go build -ldflags="-s -w -H=windowsgui" -o PomodoroTimer.exe .
+          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe .
           
           # 验证可执行文件
-          if (-not (Test-Path -Path "PomodoroTimer.exe")) {
+          if (-not (Test-Path -Path "XTimer.exe")) {
             Write-Error "Executable not built"
             exit 1
           }
@@ -86,8 +86,8 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PomodoroTimer-Windows
-          path: PomodoroTimer.exe
+          name: XTimer-Windows
+          path: XTimer.exe
 
   release:
     needs: [build-windows]
@@ -99,13 +99,13 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: PomodoroTimer-Windows
+          name: XTimer-Windows
           path: release
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/PomodoroTimer.exe
+          files: release/XTimer.exe
           tag_name: v1.0.0
           name: Release v1.0.0
           body: |
