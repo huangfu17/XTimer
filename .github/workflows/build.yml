@@ -23,7 +23,7 @@ jobs:
           mkdir -p bundled
           
           # 使用 -name 参数导出变量
-          fyne bundle -o bundled/resources.go -pkg bundled -name Logo assets/Logo.jpeg
+          fyne bundle -o bundled/resources.go -pkg bundled -name Logo assets/Logo.png
 
           
           # 验证生成的文件
