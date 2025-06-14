@@ -58,6 +58,8 @@ var (
 
 func (p *MyApp) initResources() {
 
+	_, _ = loadResource(defaultWorkInformPath)
+	_, _ = loadResource(defaultBreakInformPath)
 	logoImage, _ = loadResource("assets/Logo.png")
 	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
@@ -144,7 +146,7 @@ type settings struct {
 }
 
 func main() {
-	myApp := app.NewWithID("xTimer")
+	myApp := app.NewWithID("XTimer")
 	pomodoro := &MyApp{
 		app:          myApp,
 		currentState: stateIdle,
