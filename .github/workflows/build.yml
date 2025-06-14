@@ -1,17 +1,10 @@
-name: Build and Release Pomodoro Timer
+name: Build and Release
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build-windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        go-version: ['1.22']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,120 +12,32 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-          cache: true
+          go-version: '1.22'
 
-      - name: Install dependencies
-        run: |
-          go install github.com/akavel/rsrc@latest
-          go install github.com/fyne-io/fyne-cross@latest
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
-      - name: Prepare resources
+      - name: Bundle resources
         run: |
-          # 创建 manifest 文件
-          New-Item -Path xtimer.manifest -ItemType File -Value @"
-          <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-          <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-            <assemblyIdentity 
-              version="1.0.0.0"
-              processorArchitecture="amd64"
-              name="XTimer"
-              type="win32"
-            />
-            <description>Pomodoro Timer Application</description>
-            <dependency>
-              <dependentAssembly>
-                <assemblyIdentity
-                  type="win32"
-                  name="Microsoft.Windows.Common-Controls"
-                  version="6.0.0.0"
-                  processorArchitecture="amd64"
-                  publicKeyToken="6595b64144ccf1df"
-                  language="*"
-                />
-              </dependentAssembly>
-            </dependency>
-            <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
-              <security>
-                <requestedPrivileges>
-                  <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
-                </requestedPrivileges>
-              </security>
-            </trustInfo>
-          </assembly>
-          "@
+          # 确保目录存在
+          mkdir -p bundled
           
-          # 转换 PNG 为 ICO
-          choco install imagemagick -y --no-progress
-          magick convert assets/logo.png -define icon:auto-resize=256,128,64,48,32,16 assets/logo.ico
+          # 使用 -name 参数导出变量
+          fyne bundle -o bundled/resources.go -pkg bundled -name Logo assets/Logo.jpeg
 
-      - name: Generate resource file
-        run: |
-          # 使用相对路径避免权限问题
-          rsrc -manifest xtimer.manifest -ico assets/logo.ico -o rsrc.syso
-          if (-not (Test-Path rsrc.syso)) { 
-            Write-Error "rsrc.syso not generated"
-            exit 1 
-          }
-
-      - name: Build Windows executable
-        run: |
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          $env:CGO_ENABLED = "1"
-          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go
-
-      - name: Compress executable
-        run: |
-          choco install upx -y --no-progress
-          upx --best XTimer.exe
-
-      - name: Verify executable icon
-        run: |
-          # 使用可靠的图标验证方法
-          if (-not (Test-Path XTimer.exe)) { exit 1 }
           
-          # 检查文件是否包含图标资源
-          Add-Type -AssemblyName System.Drawing
-          $exePath = Join-Path -Path $pwd -ChildPath "XTimer.exe"
-          try {
-            $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exePath)
-            if (-not $icon) {
-              Write-Error "No icon extracted from executable"
-              exit 1
-            }
-            Write-Output "Icon verification successful"
-          } catch {
-            Write-Error "Icon verification failed: $_"
+          # 验证生成的文件
+          if [ ! -f "bundled/resources.go" ]; then
+            echo "❌ Resource bundle failed to generate"
             exit 1
-          }
+          fi
 
-      - name: Upload Windows artifact
+      - name: Build application
+        run: |
+          go build -o PomodoroTimer.exe .
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: XTimer-Windows
-          path: XTimer.exe
-
-  release:
-    needs: [build-windows]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/XTimer-Windows/XTimer.exe
-          tag_name: v1.0.0
-          name: Release v1.0.0
-          body: |
-            Pomodoro Timer Application
-            - Windows: XTimer.exe
-          draft: false
-          prerelease: false
+          name: PomodoroTimer-Windows
+          path: PomodoroTimer.exe

@@ -20,6 +20,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 	"image/color"
 	"io"
+	"leo/HTimer/bundled"
 	"log"
 	"math"
 	"os"
@@ -42,8 +43,8 @@ const (
 )
 
 const (
-	defaultWorkInformPath  = "assets/start.mp3"
-	defaultBreakInformPath = "assets/end.mp3"
+	defaultWorkInformPath  = "assets/Start.mp3"
+	defaultBreakInformPath = "assets/End.mp3"
 )
 
 var (
@@ -57,11 +58,11 @@ var (
 
 func (p *MyApp) initResources() {
 
-	clockImage, _ = loadResource("assets/clock.png")
-	pomodoroImage, _ = loadResource("assets/pomodoro.png")
-	workingImage, _ = loadResource("assets/working.png")
-	breakingImage, _ = loadResource("assets/breaking.png")
-	pauseImage, _ = loadResource("assets/pause.png")
+	clockImage = bundled.Logo
+	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
+	workingImage, _ = loadResource("assets/Working.png")
+	breakingImage, _ = loadResource("assets/Breaking.png")
+	pauseImage, _ = loadResource("assets/Pause.png")
 	font, _ = loadResource("assets/TNR.ttf")
 }
 
@@ -166,9 +167,7 @@ func main() {
 		}
 	})
 
-	if icon, err := loadResource("assets/logo.jpeg"); err == nil {
-		pomodoro.window.SetIcon(icon)
-	}
+	pomodoro.window.SetIcon(bundled.Logo)
 
 	pomodoro.initResources()
 	pomodoro.loadSettings()
