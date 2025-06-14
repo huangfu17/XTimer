@@ -95,14 +95,10 @@ jobs:
         with:
           files: |
             artifacts/XTimer-Windows/XTimer.exe
-            artifacts/XTimer-macOS/XTimer.app
-            artifacts/XTimer-Linux/XTimer-linux
           tag_name: v1.0.0
           name: Release v1.0.0
           body: |
             Pomodoro Timer Application
             - Windows: XTimer.exe
-            - macOS: XTimer.app
-            - Linux: XTimer-linux
           draft: false
           prerelease: false
