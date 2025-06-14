@@ -51,6 +51,7 @@ var (
 	workingImage  fyne.Resource
 	breakingImage fyne.Resource
 	pauseImage    fyne.Resource
+	font          fyne.Resource
 )
 
 func (p *MyApp) initResources() {
@@ -60,6 +61,7 @@ func (p *MyApp) initResources() {
 	workingImage, _ = loadResource("assets/working.png")
 	breakingImage, _ = loadResource("assets/breaking.png")
 	pauseImage, _ = loadResource("assets/pause.png")
+	font, _ = loadResource("assets/TNR.ttf")
 }
 
 type MyApp struct {
@@ -152,12 +154,14 @@ func main() {
 	pomodoro.window.SetFixedSize(true)
 
 	myApp.Lifecycle().SetOnStopped(func() {
-		pomodoro.logInfo("shutdown run.")
 		if pomodoro.ticker != nil {
 			pomodoro.ticker.Stop()
 		}
 		if pomodoro.db != nil {
-			pomodoro.db.Close()
+			err := pomodoro.db.Close()
+			if err != nil {
+				pomodoro.logError("close db error", err)
+			}
 		}
 	})
 
@@ -247,13 +251,13 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.total = time.Duration(p.setting.WorkTime) * time.Second
 	p.remaining = p.total
 
-	p.timeText = canvas.NewText(formatDuration(p.remaining), theme.ErrorColor())
+	p.timeText = canvas.NewText(formatDuration(p.remaining), color.RGBA{R: 180, G: 30, B: 30, A: 255})
 	p.timeText.TextSize = 100
+	//p.timeText.FontSource = font
 
 	p.startBtn = widget.NewButtonWithIcon("开始", theme.MediaPlayIcon(), p.toggleTimer)
 	p.startBtn.Importance = widget.HighImportance
 	p.resetBtn = widget.NewButtonWithIcon("重置", theme.MediaStopIcon(), func() {
-		// 显示二次确认弹窗
 		informDialog := dialog.NewCustomConfirm("确认重置", "确定", "手滑",
 			container.NewCenter(canvas.NewText("重置将会清除当前状态和进度，确认吗？", theme.TextColor())), func(confirmed bool) {
 				if confirmed {
@@ -265,10 +269,10 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	})
 	p.resetBtn.Importance = widget.DangerImportance
 
-	p.statCountText = canvas.NewText(p.getPomodoroCount(), theme.PrimaryColor())
+	p.statCountText = canvas.NewText(p.getPomodoroCount(), color.RGBA{R: 50, G: 120, B: 50, A: 255})
 	p.statCountText.TextSize = 16
 
-	p.statTimeText = canvas.NewText(p.getPomodoroTime(), theme.PrimaryColor())
+	p.statTimeText = canvas.NewText(p.getPomodoroTime(), color.RGBA{R: 50, G: 120, B: 50, A: 255})
 	p.statTimeText.TextSize = 16
 
 	countIcon := widget.NewIcon(pomodoroImage)
@@ -417,16 +421,19 @@ func (p *MyApp) transitionState(newState state) {
 		p.total = time.Duration(p.setting.WorkTime) * time.Second
 		p.stateText.Text = "专注中..."
 		p.statImage.Resource = workingImage
-		p.stateText.Color = theme.PrimaryColor()
+		//p.stateText.Color = theme.PrimaryColor()
+		p.stateText.Color = color.RGBA{R: 50, G: 120, B: 50, A: 255}
 	case stateBreaking:
 		p.total = time.Duration(p.setting.BreakTime) * time.Second
 		p.stateText.Text = "休息中..."
 		p.statImage.Resource = breakingImage
+		//p.stateText.Color = theme.PrimaryColor()
 		p.stateText.Color = color.RGBA{R: 50, G: 50, B: 180, A: 255}
 	case stateIdle:
 		p.stateText.Text = "准备开始"
 		p.statImage.Resource = pauseImage
-		p.stateText.Color = theme.PrimaryColor()
+		p.stateText.Color = color.RGBA{R: 50, G: 120, B: 50, A: 255}
+		//p.stateText.Color = theme.PrimaryColor()
 	case statePause:
 		p.stateText.Text = "暂个停..."
 		p.statImage.Resource = pauseImage
@@ -535,7 +542,7 @@ func (p *MyApp) loadSettings() {
 	}
 
 	if _, err := os.Stat("settings.json"); os.IsNotExist(err) {
-		p.saveSettings()
+		p.logError("配置文件打开失败:", err)
 		return
 	}
 
@@ -642,7 +649,12 @@ func (p *MyApp) selectSoundFile(callback func(string)) {
 		if err != nil || reader == nil {
 			return
 		}
-		defer reader.Close()
+		defer func(reader fyne.URIReadCloser) {
+			err := reader.Close()
+			if err != nil {
+				p.logError("close select sound file error", err)
+			}
+		}(reader)
 
 		filePath := reader.URI().Path()
 		if !isAudioFile(filePath) {
@@ -722,10 +734,12 @@ func (p *MyApp) initDatabase() error {
 	var err error
 	p.db, err = sql.Open("sqlite3", "./pomodoro.db")
 	if err != nil {
+		p.logError("open db error", err)
 		return fmt.Errorf("打开数据库失败: %w", err)
 	}
 
 	if _, err := p.db.Exec(CREATE_SQL); err != nil {
+		p.logError("create db table error", err)
 		return fmt.Errorf("创建表失败: %w", err)
 	}
 	return nil
