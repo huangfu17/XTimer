@@ -29,8 +29,8 @@ jobs:
 
       - name: Prepare resources
         run: |
-          # 创建 manifest 文件
-          New-Item -Path xtimer.manifest -ItemType File -Value @"
+          # 创建包含图标声明的完整 manifest 文件
+          $manifestContent = @"
           <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
           <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
             <assemblyIdentity 
@@ -52,12 +52,28 @@ jobs:
                 />
               </dependentAssembly>
             </dependency>
+            <iconManifest>
+              <icon ID="1" Path="assets/logo.ico" />
+            </iconManifest>
           </assembly>
           "@
+          $manifestContent | Out-File -FilePath xtimer.manifest -Encoding UTF8
+          
+          # 确保 assets 目录存在
+          if (-not (Test-Path -Path assets)) {
+            New-Item -Path assets -ItemType Directory
+          }
           
           # 转换 PNG 为 ICO (需要安装 ImageMagick)
-          choco install imagemagick -y
+          if (-not (Get-Command magick -ErrorAction SilentlyContinue)) {
+            choco install imagemagick -y
+          }
           magick convert assets/logo.png -define icon:auto-resize=256,128,64,48,32,16 assets/logo.ico
+          
+          # 验证文件存在
+          Write-Host "Manifest file content:"
+          Get-Content -Path xtimer.manifest
+          Write-Host "Icon file exists: " (Test-Path -Path assets/logo.ico)
 
       - name: Generate resource file
         run: rsrc -manifest xtimer.manifest -ico assets/logo.ico -o rsrc.syso
@@ -67,11 +83,13 @@ jobs:
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
           $env:CGO_ENABLED = "1"
-          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go
+          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe main.go rsrc.syso  # 显式包含资源文件
 
       - name: Compress executable
         run: |
-          choco install upx -y
+          if (-not (Get-Command upx -ErrorAction SilentlyContinue)) {
+            choco install upx -y
+          }
           upx --best XTimer.exe
 
       - name: Upload Windows artifact
@@ -85,7 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
-      contents: write  # 授予创建发布的权限
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -93,12 +111,13 @@ jobs:
           path: artifacts
 
       - name: Create release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/XTimer-Windows/XTimer.exe
-          tag_name: v1.0.0
-          name: Release v1.0.0
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
           body: |
             Pomodoro Timer Application
             - Windows: XTimer.exe
