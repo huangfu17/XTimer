@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"fyne.io/fyne/v2"
@@ -26,6 +27,9 @@ import (
 	"strings"
 	"time"
 )
+
+//go:embed assets/*
+var assets embed.FS
 
 type state int
 
@@ -65,14 +69,6 @@ type MyApp struct {
 	today         string
 	db            *sql.DB
 }
-
-var (
-	clockImage    fyne.Resource
-	pomodoroImage fyne.Resource
-	workingImage  fyne.Resource
-	breakingImage fyne.Resource
-	pauseImage    fyne.Resource
-)
 
 const (
 	CREATE_SQL = `
@@ -148,10 +144,9 @@ func main() {
 	})
 
 	// 加载资源
-	if icon, err := fyne.LoadResourceFromPath("logo.jpeg"); err == nil {
+	if icon, err := loadResource("assets/logo.jpeg"); err == nil {
 		pomodoro.window.SetIcon(icon)
 	}
-	pomodoro.loadResources()
 
 	// 初始化数据库
 	if err := pomodoro.initDatabase(); err != nil {
@@ -176,37 +171,12 @@ func main() {
 	pomodoro.window.ShowAndRun()
 }
 
-func (p *MyApp) loadResources() {
-	var err error
-	clockImage, err = fyne.LoadResourceFromPath("clock.png")
+func loadResource(path string) (fyne.Resource, error) {
+	data, err := assets.ReadFile(path)
 	if err != nil {
-		p.logError("加载时钟图标失败:", err)
-		clockImage = theme.ViewRefreshIcon()
+		return nil, err
 	}
-
-	pomodoroImage, err = fyne.LoadResourceFromPath("pomodoro.png")
-	if err != nil {
-		p.logError("加载番茄图标失败:", err)
-		pomodoroImage = theme.InfoIcon()
-	}
-
-	workingImage, err = fyne.LoadResourceFromPath("working.png")
-	if err != nil {
-		p.logError("加载工作图标失败:", err)
-		workingImage = theme.ComputerIcon()
-	}
-
-	breakingImage, err = fyne.LoadResourceFromPath("breaking.png")
-	if err != nil {
-		p.logError("加载休息图标失败:", err)
-		breakingImage = theme.MediaPauseIcon()
-	}
-
-	pauseImage, err = fyne.LoadResourceFromPath("pause.png")
-	if err != nil {
-		p.logError("加载暂停图标失败:", err)
-		pauseImage = theme.MediaPauseIcon()
-	}
+	return fyne.NewStaticResource(filepath.Base(path), data), nil
 }
 
 func (p *MyApp) createUI() fyne.CanvasObject {
@@ -232,7 +202,12 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.stateText = canvas.NewText("准备开始", theme.PrimaryColor())
 	p.stateText.TextSize = 28
 
-	p.statImage = canvas.NewImageFromResource(pauseImage)
+	// 加载统计图标
+	statImg, err := loadResource("assets/pause.png")
+	if err != nil {
+		statImg = theme.MediaPauseIcon()
+	}
+	p.statImage = canvas.NewImageFromResource(statImg)
 	p.statImage.FillMode = canvas.ImageFillContain
 	p.statImage.SetMinSize(fyne.NewSize(40, 40))
 
@@ -258,8 +233,12 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.statTimeText = canvas.NewText(p.getPomodoroTime(), theme.PrimaryColor())
 	p.statTimeText.TextSize = 16
 
-	countIcon := widget.NewIcon(pomodoroImage)
-	timeIcon := widget.NewIcon(clockImage)
+	// 加载图标
+	pomodoroImg, _ := loadResource("assets/pomodoro.png")
+	countIcon := widget.NewIcon(pomodoroImg)
+
+	clockImg, _ := loadResource("assets/clock.png")
+	timeIcon := widget.NewIcon(clockImg)
 
 	countItem := container.NewHBox(
 		countIcon,
@@ -387,20 +366,24 @@ func (p *MyApp) timerComplete() {
 func (p *MyApp) transitionState(newState state) {
 	p.currentState = newState
 
+	// 加载状态图标
 	switch newState {
 	case stateWorking:
 		p.total = time.Duration(p.setting.WorkTime) * time.Minute
 		p.stateText.Text = "专注中..."
-		p.statImage.Resource = workingImage
+		img, _ := loadResource("assets/working.png")
+		p.statImage.Resource = img
 		p.stateText.Color = theme.PrimaryColor()
 	case stateBreaking:
 		p.total = time.Duration(p.setting.BreakTime) * time.Minute
 		p.stateText.Text = "休息中..."
-		p.statImage.Resource = breakingImage
+		img, _ := loadResource("assets/breaking.png")
+		p.statImage.Resource = img
 		p.stateText.Color = color.RGBA{R: 50, G: 50, B: 180, A: 255}
 	case stateIdle:
 		p.stateText.Text = "已暂停"
-		p.statImage.Resource = pauseImage
+		img, _ := loadResource("assets/pause.png")
+		p.statImage.Resource = img
 		p.stateText.Color = theme.DisabledColor()
 	}
 
