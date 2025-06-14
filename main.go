@@ -40,6 +40,11 @@ const (
 	statePause
 )
 
+const (
+	defaultWorkInformPath  = "assets/start.mp3"
+	defaultBreakInformPath = "assets/end.mp3"
+)
+
 var (
 	clockImage    fyne.Resource
 	pomodoroImage fyne.Resource
@@ -147,6 +152,7 @@ func main() {
 	pomodoro.window.SetFixedSize(true)
 
 	myApp.Lifecycle().SetOnStopped(func() {
+		pomodoro.logInfo("shutdown run.")
 		if pomodoro.ticker != nil {
 			pomodoro.ticker.Stop()
 		}
@@ -176,8 +182,24 @@ func main() {
 		canvas.NewRectangle(color.RGBA{R: 240, G: 248, B: 255, A: 255}),
 		pomodoro.createUI(),
 	)
+
+	pomodoro.window.SetCloseIntercept(func() {
+		closeDialog := dialog.NewCustomConfirm(
+			"关闭确认",
+			"关闭",
+			"取消",
+			container.NewCenter(canvas.NewText("确定要关闭应用吗？", theme.TextColor())), func(confirmed bool) {
+				if confirmed {
+					pomodoro.window.Close()
+				}
+			}, pomodoro.window)
+		closeDialog.Resize(fyne.NewSize(200, 150))
+		closeDialog.Show()
+	})
+
 	pomodoro.window.SetContent(content)
 	pomodoro.window.ShowAndRun()
+
 }
 
 func loadResource(path string) (fyne.Resource, error) {
@@ -230,7 +252,17 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 
 	p.startBtn = widget.NewButtonWithIcon("开始", theme.MediaPlayIcon(), p.toggleTimer)
 	p.startBtn.Importance = widget.HighImportance
-	p.resetBtn = widget.NewButtonWithIcon("重置", theme.MediaStopIcon(), p.resetTimer)
+	p.resetBtn = widget.NewButtonWithIcon("重置", theme.MediaStopIcon(), func() {
+		// 显示二次确认弹窗
+		informDialog := dialog.NewCustomConfirm("确认重置", "确定", "手滑",
+			container.NewCenter(canvas.NewText("重置将会清除当前状态和进度，确认吗？", theme.TextColor())), func(confirmed bool) {
+				if confirmed {
+					p.resetTimer()
+				}
+			}, p.window)
+		informDialog.Resize(fyne.NewSize(200, 150))
+		informDialog.Show()
+	})
 	p.resetBtn.Importance = widget.DangerImportance
 
 	p.statCountText = canvas.NewText(p.getPomodoroCount(), theme.PrimaryColor())
@@ -412,14 +444,14 @@ func (p *MyApp) showNotification() {
 		title = "工作完成了！"
 		message = "辛苦了，休息一会吧！"
 		p.nextState = stateBreaking
-		soundFile = "assets/end.mp3"
+		soundFile = p.setting.BreakInformPath
 		p.updatePomodoro()
 		p.saveTaskRecord()
 	} else {
 		title = "继续工作了！"
 		message = "休息结束，要工作了，加油！"
 		p.nextState = stateWorking
-		soundFile = "assets/start.mp3"
+		soundFile = p.setting.WorkInformPath
 	}
 
 	go p.playSound(soundFile)
@@ -496,8 +528,10 @@ func (p *MyApp) getPomodoroTime() string {
 func (p *MyApp) loadSettings() {
 
 	p.setting = &settings{
-		WorkTime:  45,
-		BreakTime: 15,
+		WorkTime:        45,
+		BreakTime:       15,
+		WorkInformPath:  defaultWorkInformPath,
+		BreakInformPath: defaultBreakInformPath,
 	}
 
 	if _, err := os.Stat("settings.json"); os.IsNotExist(err) {
@@ -520,6 +554,12 @@ func (p *MyApp) loadSettings() {
 	}
 	if p.setting.BreakTime == 0 {
 		p.setting.BreakTime = 15
+	}
+	if p.setting.BreakInformPath == "" {
+		p.setting.BreakInformPath = defaultBreakInformPath
+	}
+	if p.setting.WorkInformPath == "" {
+		p.setting.WorkInformPath = defaultWorkInformPath
 	}
 }
 
@@ -557,21 +597,29 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 		p.setting.workPathText.SetText(truncatePath(p.setting.WorkInformPath, 30))
 	}
 	selectWorkInformBtn := widget.NewButton("更改", p.selectWorkFile)
+	resetWorkInformBtn := widget.NewButton("重置", func() {
+		p.setting.WorkInformPath = defaultWorkInformPath
+		p.setting.workPathText.SetText(defaultWorkInformPath)
+	})
 
 	p.setting.breakPathText = widget.NewLabel("默认")
 	if p.setting.BreakInformPath != "" {
 		p.setting.breakPathText.SetText(truncatePath(p.setting.BreakInformPath, 30))
 	}
 	selectBreakInformBtn := widget.NewButton("更改", p.selectBreakFile)
+	resetBreakInformBtn := widget.NewButton("重置", func() {
+		p.setting.BreakInformPath = defaultBreakInformPath
+		p.setting.breakPathText.SetText(defaultBreakInformPath)
+	})
 
 	return container.NewVBox(
 		container.NewHBox(widget.NewLabel("番茄钟:"), workEntry, widget.NewLabel("分钟")),
 		layout.NewSpacer(),
 		container.NewHBox(widget.NewLabel("休息钟:"), breakEntry, widget.NewLabel("分钟")),
 		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("上课铃:"), p.setting.workPathText, selectWorkInformBtn),
+		container.NewHBox(widget.NewLabel("上课铃:"), p.setting.workPathText, selectWorkInformBtn, resetWorkInformBtn),
 		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("下课铃:"), p.setting.breakPathText, selectBreakInformBtn),
+		container.NewHBox(widget.NewLabel("下课铃:"), p.setting.breakPathText, selectBreakInformBtn, resetBreakInformBtn),
 	)
 }
 
@@ -709,16 +757,27 @@ func (p *MyApp) getTotalWorkTimeByDate(date string) (int, error) {
 
 func (p *MyApp) playSound(filePath string) {
 	if filePath == "" {
-		// 使用默认声音
-		filePath = "default.mp3"
+		filePath = defaultWorkInformPath
 	}
-
 	switch runtime.GOOS {
 	case "darwin":
-		exec.Command("afplay", filePath).Start()
+		err := exec.Command("afplay", filePath).Start()
+		if err != nil {
+			p.logError("play audio failed.", err)
+		}
 	case "windows":
-		exec.Command("cmd", "/c", "start", filePath).Start()
+		err := exec.Command("cmd", "/c", "start", filePath).Start()
+		if err != nil {
+			if err != nil {
+				p.logError("play audio failed.", err)
+			}
+		}
 	case "linux":
-		exec.Command("aplay", filePath).Start()
+		err := exec.Command("aplay", filePath).Start()
+		if err != nil {
+			if err != nil {
+				p.logError("play audio failed.", err)
+			}
+		}
 	}
 }

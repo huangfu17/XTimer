@@ -6,3 +6,8 @@
 2025/06/14 07:27:47.781759 main.go:781: [ERROR] [open pomodoro.png: no such file or directory reload pomodoro png failed.]
 2025/06/14 07:28:26.618042 main.go:773: [INFO] [task record= {0 2025-06-14 2025-06-14 07:28:26.611936 +0800 CST m=+12.082671043 2025-06-14 07:28:26.617975 +0800 CST m=+12.088709793 1 pomodoro}]
 2025/06/14 07:28:54.548255 main.go:773: [INFO] [task record= {0 2025-06-14 2025-06-14 07:28:54.53757 +0800 CST m=+40.008113626 2025-06-14 07:28:54.54813 +0800 CST m=+40.018673751 1 pomodoro}]
+2025/06/14 17:34:12 main.go:712: [INFO] shutdown run.
+2025/06/14 17:35:45 main.go:712: [INFO] shutdown run.
+2025/06/14 17:43:37 main.go:714: [INFO] shutdown run.
+2025/06/14 17:45:42 main.go:712: [INFO] shutdown run.
+2025/06/14 17:47:45 main.go:718: [INFO] shutdown run.
