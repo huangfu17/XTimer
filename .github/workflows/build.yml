@@ -84,6 +84,8 @@ jobs:
     needs: [build-windows]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write  # 授予创建发布的权限
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
