@@ -659,7 +659,7 @@ func (p *MyApp) selectSoundFile(callback func(string)) {
 
 		filePath := reader.URI().Path()
 		if !isAudioFile(filePath) {
-			dialog.ShowInformation("提示", "请选择音频文件 (MP3, WAV等)", p.window)
+			dialog.ShowInformation("提示", "请选择MP3音频文件)", p.window)
 			return
 		}
 
@@ -676,7 +676,7 @@ func truncatePath(path string, maxLen int) string {
 
 func isAudioFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	audioExts := []string{".mp3", ".wav", ".aac", ".m4a", ".ogg", ".oga", ".flac"}
+	audioExts := []string{".mp3"}
 	for _, audioExt := range audioExts {
 		if ext == audioExt {
 			return true
@@ -791,7 +791,7 @@ func (p *MyApp) playSound(filePath string) {
 	if filePath == "" {
 		filePath = defaultWorkInformPath
 	}
-	playSoundWithBeep(filePath)
+	p.playSoundWithBeep(filePath)
 
 	//switch runtime.GOOS {
 	//case "darwin":
@@ -817,17 +817,18 @@ func (p *MyApp) playSound(filePath string) {
 	//}
 }
 
-func playSoundWithBeep(filePath string) {
+func (p *MyApp) playSoundWithBeep(filePath string) {
+
 	f, err := os.Open(filePath)
 	if err != nil {
-		fmt.Printf("打开音频文件失败: %v\n", err)
+		p.logError("open mp3 file error", err)
 		return
 	}
 	defer f.Close()
 
 	streamer, format, err := mp3.Decode(f)
 	if err != nil {
-		fmt.Printf("解码音频失败: %v\n", err)
+		p.logError("decode mp3 file error", err)
 		return
 	}
 	defer streamer.Close()
