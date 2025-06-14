@@ -20,9 +20,7 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -483,7 +481,7 @@ func (p *MyApp) showNotification() {
 	informDialog.Show()
 
 	fyne.Do(func() {
-		p.window.RequestFocus()
+		p.ensureFocus()
 	})
 }
 
@@ -769,29 +767,49 @@ func (p *MyApp) getTotalWorkTimeByDate(date string) (int, error) {
 	return total, err
 }
 
+func (p *MyApp) ensureFocus() {
+	// 延迟请求焦点
+	go func() {
+		// 第一次延迟
+		time.Sleep(200 * time.Millisecond)
+		p.window.RequestFocus()
+
+		// 第二次延迟（增加成功率）
+		time.Sleep(500 * time.Millisecond)
+		p.window.RequestFocus()
+
+		// 第三次延迟（针对特别顽固的情况）
+		time.Sleep(1000 * time.Millisecond)
+		p.window.RequestFocus()
+	}()
+}
+
 func (p *MyApp) playSound(filePath string) {
 	if filePath == "" {
 		filePath = defaultWorkInformPath
 	}
-	switch runtime.GOOS {
-	case "darwin":
-		err := exec.Command("afplay", filePath).Start()
-		if err != nil {
-			p.logError("play audio failed.", err)
-		}
-	case "windows":
-		err := exec.Command("cmd", "/c", "start", filePath).Start()
-		if err != nil {
-			if err != nil {
-				p.logError("play audio failed.", err)
-			}
-		}
-	case "linux":
-		err := exec.Command("aplay", filePath).Start()
-		if err != nil {
-			if err != nil {
-				p.logError("play audio failed.", err)
-			}
-		}
-	}
+	playSoundWithBeep(filePath)
+
+	//switch runtime.GOOS {
+	//case "darwin":
+	//	err := exec.Command("afplay", filePath).Start()
+	//	if err != nil {
+	//		p.logError("play audio failed.", err)
+	//	}
+	//case "windows":
+	//	playSoundWithBeep(filePath)
+	//	//err := exec.Command("cmd", "/c", "start", filePath).Start()
+	//	//if err != nil {
+	//	//	if err != nil {
+	//	//		p.logError("play audio failed.", err)
+	//	//	}
+	//	//}
+	//case "linux":
+	//	err := exec.Command("aplay", filePath).Start()
+	//	if err != nil {
+	//		if err != nil {
+	//			p.logError("play audio failed.", err)
+	//		}
+	//	}
+	//}
 }
