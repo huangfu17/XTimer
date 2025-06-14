@@ -20,7 +20,6 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 	"image/color"
 	"io"
-	"leo/HTimer/bundled"
 	"log"
 	"math"
 	"os"
@@ -48,6 +47,7 @@ const (
 )
 
 var (
+	logoImage     fyne.Resource
 	clockImage    fyne.Resource
 	pomodoroImage fyne.Resource
 	workingImage  fyne.Resource
@@ -58,7 +58,8 @@ var (
 
 func (p *MyApp) initResources() {
 
-	clockImage = bundled.Logo
+	logoImage, _ = loadResource("assets/Logo.png")
+	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
 	workingImage, _ = loadResource("assets/Working.png")
 	breakingImage, _ = loadResource("assets/Breaking.png")
@@ -167,7 +168,7 @@ func main() {
 		}
 	})
 
-	pomodoro.window.SetIcon(bundled.Logo)
+	pomodoro.window.SetIcon(logoImage)
 
 	pomodoro.initResources()
 	pomodoro.loadSettings()

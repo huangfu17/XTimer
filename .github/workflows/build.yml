@@ -2,15 +2,18 @@ name: Build and Release Pomodoro Timer
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest  # 使用 Linux 环境，因为 fyne-cross 需要 Docker
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -18,76 +21,43 @@ jobs:
           go-version: '1.22'
           cache: true
 
-      - name: Install Fyne CLI and dependencies
+      - name: Install fyne-cross
         run: |
-          # 安装 Fyne CLI
-          go install fyne.io/fyne/v2/cmd/fyne@latest
+          # 安装 fyne-cross
+          go install github.com/fyne-io/fyne-cross@latest
           
           # 验证安装
-          fyne version
-          
-          # 安装 ImageMagick（用于资源处理）
-          choco install imagemagick -y --no-progress
+          fyne-cross version
 
-      - name: Bundle resources
+      - name: Build with fyne-cross
         run: |
-          # 创建目录（使用 PowerShell 语法）
-          New-Item -ItemType Directory -Force -Path bundled | Out-Null
           
-          # 验证资源文件存在
-          if (-not (Test-Path -Path "assets/Logo.png")) {
-            Write-Error "Logo.png not found in assets directory"
-            Get-ChildItem -Path assets
+          # 构建 Windows 应用
+          echo "构建 Windows 应用"
+          fyne-cross windows -arch amd64 -icon assets/Logo.ico -output XTimer.exe
+          
+          # 验证构建结果
+          if [ ! -f "fyne-cross/bin/windows-amd64/XTimer.exe" ]; then
+            echo "❌ 构建失败：未找到可执行文件"
             exit 1
-          }
+          fi
           
-          # 使用绝对路径避免权限问题
-          $logoPath = Resolve-Path -Path "assets/Logo.png"
-          
-          # 打包资源（添加详细输出）
-          Write-Output "Bundling resource: $logoPath"
-          fyne bundle -o bundled/resources.go -pkg bundled -name Logo $logoPath
-          
-          # 验证生成的文件
-          if (-not (Test-Path -Path "bundled/resources.go")) {
-            Write-Error "Resource bundle failed to generate"
-            Get-ChildItem -Path bundled
-            exit 1
-          }
-          
-          Write-Output "Resource bundle generated successfully"
+          echo "✅ 构建成功"
 
-      - name: Generate Windows resources
+      - name: Compress executable (optional)
         run: |
-          # 生成 Windows 资源文件
-          fyne package -os windows -icon assets/Logo.png -appID "com.example.pomodoro"
+          # 安装 UPX
+          sudo apt-get update
+          sudo apt-get install -y upx
           
-          # 验证资源文件生成
-#          if (-not (Test-Path -Path "fyne.syso")) {
-#            Write-Error "Windows resource file not generated"
-#            exit 1
-#          }
-
-      - name: Build Windows executable
-        run: |
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          $env:CGO_ENABLED = "1"
-          
-          # 构建应用
-          go build -ldflags="-s -w -H=windowsgui" -o XTimer.exe .
-          
-          # 验证可执行文件
-          if (-not (Test-Path -Path "XTimer.exe")) {
-            Write-Error "Executable not built"
-            exit 1
-          }
+          # 压缩可执行文件
+          upx --best --lzma fyne-cross/bin/windows-amd64/XTimer.exe
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: XTimer-Windows
-          path: XTimer.exe
+          path: fyne-cross/bin/windows-amd64/XTimer.exe
 
   release:
     needs: [build-windows]
@@ -110,5 +80,9 @@ jobs:
           name: Release v1.0.0
           body: |
             Pomodoro Timer Application
+            
+            Features:
+            - Built with fyne-cross
+            - Windows executable
           draft: false
           prerelease: false
