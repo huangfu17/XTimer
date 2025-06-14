@@ -46,7 +46,7 @@ jobs:
           
           # 打包资源（添加详细输出）
           Write-Output "Bundling resource: $logoPath"
-          fyne bundle -v -o bundled/resources.go -pkg bundled -name Logo $logoPath
+          fyne bundle -o bundled/resources.go -pkg bundled -name Logo $logoPath
           
           # 验证生成的文件
           if (-not (Test-Path -Path "bundled/resources.go")) {
