@@ -11,13 +11,13 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        go-version: ['1.20']
+        go-version: ['1.22']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
@@ -75,7 +75,7 @@ jobs:
           upx --best XTimer.exe
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: XTimer-Windows
           path: XTimer.exe
@@ -84,13 +84,13 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        go-version: ['1.20']
+        go-version: ['1.22']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
@@ -138,13 +138,13 @@ jobs:
               <key>CFBundleVersion</key>
               <string>1</string>
               <key>LSMinimumSystemVersion</key>
-              <string>10.11</string>
+              <string>10.15</string>
           </dict>
           </plist>
           EOL
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: XTimer-macOS
           path: XTimer.app
@@ -153,13 +153,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.20']
+        go-version: ['1.22']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
@@ -169,7 +169,7 @@ jobs:
           GOOS=linux GOARCH=amd64 go build -o XTimer-linux main.go
 
       - name: Upload Linux artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: XTimer-Linux
           path: XTimer-linux
@@ -180,12 +180,12 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
       - name: Create release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/XTimer-Windows/XTimer.exe
