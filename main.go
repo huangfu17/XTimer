@@ -37,37 +37,51 @@ const (
 	stateIdle state = iota
 	stateWorking
 	stateBreaking
+	statePause
 )
 
-const (
-	workDuration   = 25 * time.Minute
-	breakDuration  = 5 * time.Minute
-	timerPrecision = time.Second
+var (
+	clockImage    fyne.Resource
+	pomodoroImage fyne.Resource
+	workingImage  fyne.Resource
+	breakingImage fyne.Resource
+	pauseImage    fyne.Resource
 )
+
+func (p *MyApp) initResources() {
+
+	clockImage, _ = loadResource("assets/clock.png")
+	pomodoroImage, _ = loadResource("assets/pomodoro.png")
+	workingImage, _ = loadResource("assets/working.png")
+	breakingImage, _ = loadResource("assets/breaking.png")
+	pauseImage, _ = loadResource("assets/pause.png")
+}
 
 type MyApp struct {
-	app           fyne.App
-	window        fyne.Window
-	ticker        *time.Ticker
-	remaining     time.Duration
-	total         time.Duration
-	startTime     time.Time
-	isRunning     bool
-	timeText      *canvas.Text
-	stateText     *canvas.Text
-	statImage     *canvas.Image
-	statTimeText  *canvas.Text
-	statCountText *canvas.Text
-	startBtn      *widget.Button
-	resetBtn      *widget.Button
-	setting       *settings
-	currentState  state
-	lastState     state
-	logger        *Logger
-	pomodoroCount int
-	pomodoroTime  int
-	today         string
-	db            *sql.DB
+	app              fyne.App
+	window           fyne.Window
+	ticker           *time.Ticker
+	remaining        time.Duration
+	total            time.Duration
+	totalRunningTime time.Duration
+	startTime        time.Time
+	lastStartTime    time.Time
+	isRunning        bool
+	timeText         *canvas.Text
+	stateText        *canvas.Text
+	statImage        *canvas.Image
+	statTimeText     *canvas.Text
+	statCountText    *canvas.Text
+	startBtn         *widget.Button
+	resetBtn         *widget.Button
+	setting          *settings
+	currentState     state
+	nextState        state
+	logger           *Logger
+	pomodoroCount    int
+	pomodoroTime     int
+	today            string
+	db               *sql.DB
 }
 
 const (
@@ -124,8 +138,7 @@ func main() {
 	pomodoro := &MyApp{
 		app:          myApp,
 		currentState: stateIdle,
-		remaining:    workDuration,
-		total:        workDuration,
+		nextState:    stateWorking,
 		logger:       newDefaultLogger(),
 	}
 
@@ -133,7 +146,6 @@ func main() {
 	pomodoro.window.Resize(fyne.NewSize(550, 380))
 	pomodoro.window.SetFixedSize(true)
 
-	// 设置应用生命周期
 	myApp.Lifecycle().SetOnStopped(func() {
 		if pomodoro.ticker != nil {
 			pomodoro.ticker.Stop()
@@ -143,26 +155,23 @@ func main() {
 		}
 	})
 
-	// 加载资源
 	if icon, err := loadResource("assets/logo.jpeg"); err == nil {
 		pomodoro.window.SetIcon(icon)
 	}
 
-	// 初始化数据库
+	pomodoro.initResources()
+	pomodoro.loadSettings()
+
 	if err := pomodoro.initDatabase(); err != nil {
+		pomodoro.logError("init database error,", err)
 		dialog.ShowError(err, pomodoro.window)
 		return
 	}
 
-	// 加载设置
-	pomodoro.loadSettings()
-
-	// 初始化统计
 	pomodoro.today = time.Now().Format("2006-01-02")
 	pomodoro.pomodoroCount, _ = pomodoro.countRecordByDate(pomodoro.today)
 	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
 
-	// 创建UI
 	content := container.NewStack(
 		canvas.NewRectangle(color.RGBA{R: 240, G: 248, B: 255, A: 255}),
 		pomodoro.createUI(),
@@ -202,12 +211,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.stateText = canvas.NewText("准备开始", theme.PrimaryColor())
 	p.stateText.TextSize = 28
 
-	// 加载统计图标
-	statImg, err := loadResource("assets/pause.png")
-	if err != nil {
-		statImg = theme.MediaPauseIcon()
-	}
-	p.statImage = canvas.NewImageFromResource(statImg)
+	p.statImage = canvas.NewImageFromResource(pauseImage)
 	p.statImage.FillMode = canvas.ImageFillContain
 	p.statImage.SetMinSize(fyne.NewSize(40, 40))
 
@@ -218,14 +222,16 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		),
 	)
 
+	p.total = time.Duration(p.setting.WorkTime) * time.Second
+	p.remaining = p.total
+
 	p.timeText = canvas.NewText(formatDuration(p.remaining), theme.ErrorColor())
-	p.timeText.TextSize = 80
+	p.timeText.TextSize = 100
 
 	p.startBtn = widget.NewButtonWithIcon("开始", theme.MediaPlayIcon(), p.toggleTimer)
 	p.startBtn.Importance = widget.HighImportance
 	p.resetBtn = widget.NewButtonWithIcon("重置", theme.MediaStopIcon(), p.resetTimer)
 	p.resetBtn.Importance = widget.DangerImportance
-	p.resetBtn.Disable()
 
 	p.statCountText = canvas.NewText(p.getPomodoroCount(), theme.PrimaryColor())
 	p.statCountText.TextSize = 16
@@ -233,12 +239,8 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.statTimeText = canvas.NewText(p.getPomodoroTime(), theme.PrimaryColor())
 	p.statTimeText.TextSize = 16
 
-	// 加载图标
-	pomodoroImg, _ := loadResource("assets/pomodoro.png")
-	countIcon := widget.NewIcon(pomodoroImg)
-
-	clockImg, _ := loadResource("assets/clock.png")
-	timeIcon := widget.NewIcon(clockImg)
+	countIcon := widget.NewIcon(pomodoroImage)
+	timeIcon := widget.NewIcon(clockImage)
 
 	countItem := container.NewHBox(
 		countIcon,
@@ -278,7 +280,6 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		nil,
 		container.NewVBox(
 			container.NewCenter(stateContent),
-			layout.NewSpacer(),
 			container.NewCenter(p.timeText),
 			layout.NewSpacer(),
 			buttonBox,
@@ -296,12 +297,24 @@ func (p *MyApp) toggleTimer() {
 }
 
 func (p *MyApp) startTimer() {
+	//init
 	if p.currentState == stateIdle {
-		p.transitionState(stateWorking)
+		if p.nextState == stateWorking {
+			p.total = time.Duration(p.setting.WorkTime) * time.Second
+			p.remaining = p.total
+			p.totalRunningTime = 0
+			p.startTime = time.Now()
+		}
+		if p.nextState == stateBreaking {
+			p.total = time.Duration(p.setting.WorkTime) * time.Second
+			p.remaining = p.total
+			p.totalRunningTime = 0
+			p.startTime = time.Now()
+		}
 	}
-
-	p.startTime = time.Now()
+	p.lastStartTime = time.Now()
 	p.isRunning = true
+	p.transitionState(p.nextState)
 	p.startBtn.SetText("暂停")
 	p.startBtn.SetIcon(theme.MediaPauseIcon())
 	p.startBtn.Importance = widget.WarningImportance
@@ -311,15 +324,17 @@ func (p *MyApp) startTimer() {
 		p.ticker.Stop()
 	}
 
-	p.ticker = time.NewTicker(time.Second)
+	p.ticker = time.NewTicker(500 * time.Millisecond)
 	go func() {
 		for range p.ticker.C {
 			if !p.isRunning {
 				return
 			}
 
-			elapsed := time.Since(p.startTime)
-			p.remaining = p.total - elapsed
+			currentRunTime := time.Since(p.lastStartTime)
+			p.lastStartTime = time.Now()
+			p.totalRunningTime = p.totalRunningTime + currentRunTime
+			p.remaining = p.total - p.totalRunningTime
 
 			if p.remaining <= 0 {
 				p.ticker.Stop()
@@ -337,7 +352,7 @@ func (p *MyApp) startTimer() {
 
 func (p *MyApp) pauseTimer() {
 	p.isRunning = false
-	p.transitionState(stateIdle)
+	p.transitionState(statePause)
 	p.startBtn.SetText("继续")
 	p.startBtn.SetIcon(theme.MediaPlayIcon())
 	p.startBtn.Importance = widget.HighImportance
@@ -349,42 +364,41 @@ func (p *MyApp) pauseTimer() {
 
 func (p *MyApp) resetTimer() {
 	p.pauseTimer()
-	p.currentState = stateIdle
-	p.remaining = workDuration
-	p.timeText.Text = formatDuration(p.remaining)
 	p.transitionState(stateIdle)
+	p.nextState = stateWorking
+	p.total = time.Duration(p.setting.WorkTime) * time.Second
+	p.remaining = p.total
+	p.timeText.Text = formatDuration(p.remaining)
 	p.startBtn.SetText("开始")
-	p.resetBtn.Disable()
 }
 
 func (p *MyApp) timerComplete() {
 	p.isRunning = false
-	p.lastState = p.currentState
 	p.showNotification()
 }
 
 func (p *MyApp) transitionState(newState state) {
 	p.currentState = newState
 
-	// 加载状态图标
 	switch newState {
 	case stateWorking:
-		p.total = time.Duration(p.setting.WorkTime) * time.Minute
+		p.total = time.Duration(p.setting.WorkTime) * time.Second
 		p.stateText.Text = "专注中..."
-		img, _ := loadResource("assets/working.png")
-		p.statImage.Resource = img
+		p.statImage.Resource = workingImage
 		p.stateText.Color = theme.PrimaryColor()
 	case stateBreaking:
-		p.total = time.Duration(p.setting.BreakTime) * time.Minute
+		p.total = time.Duration(p.setting.BreakTime) * time.Second
 		p.stateText.Text = "休息中..."
-		img, _ := loadResource("assets/breaking.png")
-		p.statImage.Resource = img
+		p.statImage.Resource = breakingImage
 		p.stateText.Color = color.RGBA{R: 50, G: 50, B: 180, A: 255}
 	case stateIdle:
-		p.stateText.Text = "已暂停"
-		img, _ := loadResource("assets/pause.png")
-		p.statImage.Resource = img
-		p.stateText.Color = theme.DisabledColor()
+		p.stateText.Text = "准备开始"
+		p.statImage.Resource = pauseImage
+		p.stateText.Color = theme.PrimaryColor()
+	case statePause:
+		p.stateText.Text = "暂个停..."
+		p.statImage.Resource = pauseImage
+		p.stateText.Color = theme.PrimaryColor()
 	}
 
 	p.statImage.Refresh()
@@ -393,55 +407,58 @@ func (p *MyApp) transitionState(newState state) {
 
 func (p *MyApp) showNotification() {
 	var title, message string
-	var nextState state
 	var soundFile string
-
-	if p.lastState == stateWorking {
+	if p.currentState == stateWorking {
 		title = "工作完成了！"
 		message = "辛苦了，休息一会吧！"
-		nextState = stateBreaking
-		soundFile = "end.mp3"
+		p.nextState = stateBreaking
+		soundFile = "assets/end.mp3"
 		p.updatePomodoro()
 		p.saveTaskRecord()
 	} else {
-		title = "继续工作"
+		title = "继续工作了！"
 		message = "休息结束，要工作了，加油！"
-		nextState = stateWorking
-		soundFile = "start.mp3"
+		p.nextState = stateWorking
+		soundFile = "assets/start.mp3"
 	}
 
-	// 播放声音
 	go p.playSound(soundFile)
 
-	// 显示通知
-	p.app.SendNotification(fyne.NewNotification(title, message))
-
-	dialog.ShowCustomConfirm(
+	p.currentState = stateIdle
+	informDialog := dialog.NewCustomConfirm(
 		title,
 		"好的",
-		"取消",
+		"就不",
 		container.NewCenter(canvas.NewText(message, theme.TextColor())),
 		func(confirmed bool) {
 			if confirmed {
-				p.transitionState(nextState)
-				p.remaining = p.total
-				p.startTime = time.Now()
 				p.startTimer()
+			} else {
+				p.resetTimer()
 			}
 		},
 		p.window,
 	)
+
+	informDialog.Resize(fyne.NewSize(200, 150))
+	informDialog.Show()
+
+	fyne.Do(func() {
+		p.window.RequestFocus()
+	})
 }
 
 func (p *MyApp) updatePomodoro() {
 	p.pomodoroTime += int(math.Ceil(p.total.Minutes()))
 	p.pomodoroCount++
 
-	p.statTimeText.Text = p.getPomodoroTime()
-	p.statCountText.Text = p.getPomodoroCount()
+	fyne.Do(func() {
+		p.statTimeText.Text = p.getPomodoroTime()
+		p.statCountText.Text = p.getPomodoroCount()
 
-	p.statTimeText.Refresh()
-	p.statCountText.Refresh()
+		p.statTimeText.Refresh()
+		p.statCountText.Refresh()
+	})
 }
 
 func (p *MyApp) saveTaskRecord() {
@@ -477,9 +494,10 @@ func (p *MyApp) getPomodoroTime() string {
 }
 
 func (p *MyApp) loadSettings() {
+
 	p.setting = &settings{
-		WorkTime:  25,
-		BreakTime: 5,
+		WorkTime:  45,
+		BreakTime: 15,
 	}
 
 	if _, err := os.Stat("settings.json"); os.IsNotExist(err) {
@@ -495,6 +513,13 @@ func (p *MyApp) loadSettings() {
 
 	if err := json.Unmarshal(data, &p.setting); err != nil {
 		p.logError("解析设置失败:", err)
+	}
+
+	if p.setting.WorkTime == 0 {
+		p.setting.WorkTime = 45
+	}
+	if p.setting.BreakTime == 0 {
+		p.setting.BreakTime = 15
 	}
 }
 
@@ -513,12 +538,6 @@ func (p *MyApp) saveSettings() {
 func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 	workEntry := widget.NewEntry()
 	workEntry.SetText(strconv.Itoa(p.setting.WorkTime))
-	workEntry.Validator = func(text string) error {
-		if _, err := strconv.Atoi(text); err != nil {
-			return fmt.Errorf("请输入有效数字")
-		}
-		return nil
-	}
 	workEntry.OnChanged = func(text string) {
 		if val, err := strconv.Atoi(text); err == nil {
 			p.setting.WorkTime = val
@@ -527,7 +546,6 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 
 	breakEntry := widget.NewEntry()
 	breakEntry.SetText(strconv.Itoa(p.setting.BreakTime))
-	breakEntry.Validator = workEntry.Validator
 	breakEntry.OnChanged = func(text string) {
 		if val, err := strconv.Atoi(text); err == nil {
 			p.setting.BreakTime = val
