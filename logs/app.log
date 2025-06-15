@@ -20,3 +20,8 @@
 2025/06/14 18:03:46 main.go:720: [INFO] shutdown run.
 2025/06/14 18:23:41 main.go:723: [INFO] shutdown run.
 2025/06/14 18:23:59 main.go:723: [INFO] shutdown run.
+2025/06/16 01:19:31 main.go:756: [INFO] size=%!(EXTRA fyne.Size={430 280})
+2025/06/16 01:19:54 main.go:756: [INFO] size=%!(EXTRA fyne.Size={430 252})
+2025/06/16 01:21:06 main.go:756: [INFO] size=%!(EXTRA fyne.Size={430 257})
+2025/06/16 01:21:21 main.go:756: [INFO] size=%!(EXTRA fyne.Size={430 239})
+2025/06/16 01:21:22 main.go:756: [INFO] size=%!(EXTRA fyne.Size={430 239})

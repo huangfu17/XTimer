@@ -53,7 +53,6 @@ var (
 	workingImage  fyne.Resource
 	breakingImage fyne.Resource
 	pauseImage    fyne.Resource
-	font          fyne.Resource
 )
 
 func (p *MyApp) initResources() {
@@ -66,7 +65,6 @@ func (p *MyApp) initResources() {
 	workingImage, _ = loadResource("assets/Working.png")
 	breakingImage, _ = loadResource("assets/Breaking.png")
 	pauseImage, _ = loadResource("assets/Pause.png")
-	font, _ = loadResource("assets/TNR.ttf")
 }
 
 type MyApp struct {
@@ -84,6 +82,8 @@ type MyApp struct {
 	statImage        *canvas.Image
 	statTimeText     *canvas.Text
 	statCountText    *canvas.Text
+	doBar            *widget.Toolbar
+	resetBar         *widget.Toolbar
 	startBtn         *widget.Button
 	resetBtn         *widget.Button
 	setting          *settings
@@ -145,6 +145,10 @@ type settings struct {
 	breakPathText   *widget.Label
 }
 
+var breakColor = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var workColor = color.RGBA{R: 223, G: 93, B: 31, A: 255}
+var bgColor = color.RGBA{R: 229, G: 234, B: 197, A: 255}
+
 func main() {
 	myApp := app.NewWithID("XTimer")
 	pomodoro := &MyApp{
@@ -155,8 +159,7 @@ func main() {
 	}
 
 	pomodoro.window = myApp.NewWindow("XTimer")
-	pomodoro.window.Resize(fyne.NewSize(550, 380))
-	pomodoro.window.SetFixedSize(true)
+	pomodoro.window.Resize(fyne.NewSize(400, 280))
 
 	myApp.Lifecycle().SetOnStopped(func() {
 		if pomodoro.ticker != nil {
@@ -185,10 +188,7 @@ func main() {
 	pomodoro.pomodoroCount, _ = pomodoro.countRecordByDate(pomodoro.today)
 	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
 
-	content := container.NewStack(
-		canvas.NewRectangle(color.RGBA{R: 240, G: 248, B: 255, A: 255}),
-		pomodoro.createUI(),
-	)
+	content := container.NewStack(canvas.NewRectangle(bgColor), pomodoro.createUI())
 
 	pomodoro.window.SetCloseIntercept(func() {
 		closeDialog := dialog.NewCustomConfirm(
@@ -202,6 +202,11 @@ func main() {
 			}, pomodoro.window)
 		closeDialog.Resize(fyne.NewSize(200, 150))
 		closeDialog.Show()
+	})
+
+	pomodoro.window.SetOnResize(func(size fyne.Size) {
+		// 通知所有实现了 WindowSizeListener 接口的组件
+		notifyListeners(w.Content(), size)
 	})
 
 	pomodoro.window.SetContent(content)
@@ -232,17 +237,20 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 				},
 				p.window,
 			)
-			settingsDialog.Resize(fyne.NewSize(400, 300))
+			settingsDialog.Resize(fyne.NewSize(430, 250))
 			settingsDialog.Show()
 		}),
 	)
 
-	p.stateText = canvas.NewText("准备开始", theme.PrimaryColor())
-	p.stateText.TextSize = 28
+	p.doBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaPlayIcon(), p.toggleTimer))
+	p.resetBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaStopIcon(), p.resetTimer))
+
+	p.stateText = canvas.NewText("准备开始", breakColor)
+	p.stateText.TextSize = 24
 
 	p.statImage = canvas.NewImageFromResource(pauseImage)
 	p.statImage.FillMode = canvas.ImageFillContain
-	p.statImage.SetMinSize(fyne.NewSize(40, 40))
+	p.statImage.SetMinSize(fyne.NewSize(32, 32))
 
 	stateContent := container.NewCenter(
 		container.NewHBox(
@@ -254,13 +262,13 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.total = time.Duration(p.setting.WorkTime) * time.Minute
 	p.remaining = p.total
 
-	p.timeText = canvas.NewText(formatDuration(p.remaining), color.RGBA{R: 180, G: 30, B: 30, A: 255})
-	p.timeText.TextSize = 100
+	p.timeText = canvas.NewText(formatDuration(p.remaining), workColor)
+	p.timeText.TextSize = 120
 	//p.timeText.FontSource = font
 
-	p.startBtn = widget.NewButtonWithIcon("开始", theme.MediaPlayIcon(), p.toggleTimer)
+	p.startBtn = widget.NewButtonWithIcon("", theme.MediaPlayIcon(), p.toggleTimer)
 	p.startBtn.Importance = widget.HighImportance
-	p.resetBtn = widget.NewButtonWithIcon("重置", theme.MediaStopIcon(), func() {
+	p.resetBtn = widget.NewButtonWithIcon("", theme.MediaStopIcon(), func() {
 		informDialog := dialog.NewCustomConfirm("确认重置", "确定", "手滑",
 			container.NewCenter(canvas.NewText("重置将会清除当前状态和进度，确认吗？", theme.TextColor())), func(confirmed bool) {
 				if confirmed {
@@ -273,14 +281,16 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	p.resetBtn.Importance = widget.DangerImportance
 
 	p.statCountText = canvas.NewText(p.getPomodoroCount(), color.RGBA{R: 50, G: 120, B: 50, A: 255})
-	p.statCountText.TextSize = 16
+	p.statCountText.TextSize = 20
 
 	p.statTimeText = canvas.NewText(p.getPomodoroTime(), color.RGBA{R: 50, G: 120, B: 50, A: 255})
-	p.statTimeText.TextSize = 16
+	p.statTimeText.TextSize = 20
 
 	countIcon := widget.NewIcon(pomodoroImage)
 	timeIcon := widget.NewIcon(clockImage)
 
+	//textContainer := container.NewVBox(p.statCountText)
+	//countItem := container.NewGridWithColumns(2, timeIcon, textContainer)
 	countItem := container.NewHBox(
 		countIcon,
 		container.NewVBox(
@@ -295,36 +305,55 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		),
 	)
 
-	statsContainer := container.NewGridWithRows(2, countItem, timeItem)
+	//topBox := container.NewHBox(
+	//	barContainer,
+	//	layout.NewSpacer(),
+	//	statsContainer,
+	//)
 
-	topBox := container.NewHBox(
-		toolbar,
-		layout.NewSpacer(),
+	//buttonBox := container.NewHBox(
+	//	layout.NewSpacer(),
+	//	p.doBar,
+	//	layout.NewSpacer(),
+	//	layout.NewSpacer(),
+	//	p.resetBar,
+	//	layout.NewSpacer(),
+	//)
+	statsContainer := container.NewVBox(countItem, timeItem)
+	statsContainer = container.NewPadded(statsContainer)
+
+	barContainer := container.NewVBox(toolbar, p.doBar, p.resetBar)
+	barContainer = container.NewPadded(barContainer)
+
+	finalLayout := container.New(NewProportionalLayout(0.15, 0.7, 0.15, 110, 200, 112),
+		barContainer,
+		container.NewCenter(
+			container.NewVBox(
+				container.NewCenter(stateContent),
+				container.NewCenter(p.timeText),
+			),
+		),
 		statsContainer,
 	)
 
-	buttonBox := container.NewHBox(
-		layout.NewSpacer(),
-		p.startBtn,
-		layout.NewSpacer(),
-		layout.NewSpacer(),
-		p.resetBtn,
-		layout.NewSpacer(),
-	)
+	return finalLayout
 
-	return container.NewBorder(
-		topBox,
-		nil,
-		nil,
-		nil,
-		container.NewVBox(
-			container.NewCenter(stateContent),
-			container.NewCenter(p.timeText),
-			layout.NewSpacer(),
-			buttonBox,
-			layout.NewSpacer(),
-		),
-	)
+	//return container.NewHBox(
+	//	barContainer,
+	//	container.NewCenter(container.NewVBox(container.NewCenter(stateContent), container.NewCenter(p.timeText))),
+	//	statsContainer,
+	//)
+
+	//return container.NewBorder(
+	//	topBox,
+	//	nil,
+	//	nil,
+	//	nil,
+	//	container.NewVBox(
+	//		container.NewCenter(stateContent),
+	//		container.NewCenter(p.timeText),
+	//	),
+	//)
 }
 
 func (p *MyApp) toggleTimer() {
@@ -333,6 +362,7 @@ func (p *MyApp) toggleTimer() {
 	} else {
 		p.pauseTimer()
 	}
+	p.logInfo("size=", p.window.Canvas().Size())
 }
 
 func (p *MyApp) startTimer() {
@@ -408,6 +438,7 @@ func (p *MyApp) resetTimer() {
 	p.total = time.Duration(p.setting.WorkTime) * time.Minute
 	p.remaining = p.total
 	p.timeText.Text = formatDuration(p.remaining)
+	p.timeText.Color = workColor
 	p.startBtn.SetText("开始")
 }
 
@@ -424,23 +455,22 @@ func (p *MyApp) transitionState(newState state) {
 		p.total = time.Duration(p.setting.WorkTime) * time.Minute
 		p.stateText.Text = "专注中..."
 		p.statImage.Resource = workingImage
-		//p.stateText.Color = theme.PrimaryColor()
-		p.stateText.Color = color.RGBA{R: 50, G: 120, B: 50, A: 255}
+		p.stateText.Color = breakColor
+		p.timeText.Color = workColor
 	case stateBreaking:
 		p.total = time.Duration(p.setting.BreakTime) * time.Minute
 		p.stateText.Text = "休息中..."
 		p.statImage.Resource = breakingImage
-		//p.stateText.Color = theme.PrimaryColor()
-		p.stateText.Color = color.RGBA{R: 50, G: 50, B: 180, A: 255}
+		p.stateText.Color = breakColor
+		p.timeText.Color = breakColor
 	case stateIdle:
 		p.stateText.Text = "准备开始"
 		p.statImage.Resource = pauseImage
-		p.stateText.Color = color.RGBA{R: 50, G: 120, B: 50, A: 255}
-		//p.stateText.Color = theme.PrimaryColor()
+		p.stateText.Color = breakColor
 	case statePause:
 		p.stateText.Text = "暂个停..."
 		p.statImage.Resource = pauseImage
-		p.stateText.Color = theme.PrimaryColor()
+		p.stateText.Color = breakColor
 	}
 
 	p.statImage.Refresh()
@@ -526,13 +556,11 @@ func formatDuration(d time.Duration) string {
 }
 
 func (p *MyApp) getPomodoroCount() string {
-	return fmt.Sprintf(": %d", p.pomodoroCount)
+	return fmt.Sprintf(": %d个", p.pomodoroCount)
 }
 
 func (p *MyApp) getPomodoroTime() string {
-	h := p.pomodoroTime / 60
-	m := p.pomodoroTime % 60
-	return fmt.Sprintf(": %d小时%d分", h, m)
+	return fmt.Sprintf(": %d分钟", 123)
 }
 
 func (p *MyApp) loadSettings() {
@@ -846,4 +874,101 @@ func (p *MyApp) playSoundWithBeep(filePath string) {
 
 	// 等待播放完成
 	<-done
+}
+
+// ProportionalLayout 带最小尺寸限制的比例布局
+type ProportionalLayout struct {
+	leftRatio   float32 // 左侧区域比例
+	centerRatio float32 // 中间区域比例
+	rightRatio  float32 // 右侧区域比例
+	leftMin     float32 // 左侧最小宽度
+	centerMin   float32 // 中间最小宽度
+	rightMin    float32 // 右侧最小宽度
+}
+
+// NewProportionalLayout 创建新的比例布局
+func NewProportionalLayout(left, center, right, leftMin, centerMin, rightMin float32) *ProportionalLayout {
+	return &ProportionalLayout{
+		leftRatio:   left,
+		centerRatio: center,
+		rightRatio:  right,
+		leftMin:     leftMin,
+		centerMin:   centerMin,
+		rightMin:    rightMin,
+	}
+}
+
+// Layout 实现布局接口
+func (p *ProportionalLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) != 3 {
+		return // 必须有三个对象：左、中、右
+	}
+
+	// 计算总比例
+	totalRatio := p.leftRatio + p.centerRatio + p.rightRatio
+
+	// 计算各区域初始宽度
+	leftWidth := size.Width * p.leftRatio / totalRatio
+	centerWidth := size.Width * p.centerRatio / totalRatio
+	rightWidth := size.Width * p.rightRatio / totalRatio
+
+	// 应用最小宽度限制，记录需要补偿的差值
+	leftDelta := float32(0)
+	if leftWidth < p.leftMin {
+		leftDelta = p.leftMin - leftWidth
+		leftWidth = p.leftMin
+	}
+
+	centerDelta := float32(0)
+	if centerWidth < p.centerMin {
+		centerDelta = p.centerMin - centerWidth
+		centerWidth = p.centerMin
+	}
+
+	rightDelta := float32(0)
+	if rightWidth < p.rightMin {
+		rightDelta = p.rightMin - rightWidth
+		rightWidth = p.rightMin
+	}
+
+	// 计算总差值
+	totalDelta := leftDelta + centerDelta + rightDelta
+
+	// 如果总差值大于0，需要从其他区域扣除
+	if totalDelta > 0 {
+		// 计算剩余可分配宽度
+		remaining := size.Width - p.leftMin - p.centerMin - p.rightMin
+		centerWidth = p.centerMin + remaining
+	}
+
+	// 布局左侧区域
+	objects[0].Resize(fyne.NewSize(leftWidth, size.Height))
+	objects[0].Move(fyne.NewPos(0, 0))
+
+	// 布局中间区域
+	objects[1].Resize(fyne.NewSize(centerWidth, size.Height))
+	objects[1].Move(fyne.NewPos(leftWidth, 0))
+
+	// 布局右侧区域
+	objects[2].Resize(fyne.NewSize(rightWidth, size.Height))
+	objects[2].Move(fyne.NewPos(leftWidth+centerWidth, 0))
+}
+
+// MinSize 计算最小尺寸
+func (p *ProportionalLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) != 3 {
+		return fyne.NewSize(0, 0)
+	}
+
+	// 计算三个区域的最小高度
+	minHeight := fyne.Max(
+		objects[0].MinSize().Height,
+		fyne.Max(
+			objects[1].MinSize().Height,
+			objects[2].MinSize().Height,
+		),
+	)
+
+	// 最小宽度为三个区域最小宽度之和
+	return fyne.NewSize(p.leftMin+p.centerMin+p.rightMin, minHeight)
 }
