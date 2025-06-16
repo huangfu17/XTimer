@@ -159,7 +159,7 @@ func main() {
 	}
 
 	pomodoro.window = myApp.NewWindow("XTimer")
-	pomodoro.window.Resize(fyne.NewSize(400, 280))
+	pomodoro.window.Resize(fyne.NewSize(400, 250))
 
 	myApp.Lifecycle().SetOnStopped(func() {
 		if pomodoro.ticker != nil {
@@ -202,11 +202,6 @@ func main() {
 			}, pomodoro.window)
 		closeDialog.Resize(fyne.NewSize(200, 150))
 		closeDialog.Show()
-	})
-
-	pomodoro.window.SetOnResize(func(size fyne.Size) {
-		// 通知所有实现了 WindowSizeListener 接口的组件
-		notifyListeners(w.Content(), size)
 	})
 
 	pomodoro.window.SetContent(content)
@@ -337,23 +332,6 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	)
 
 	return finalLayout
-
-	//return container.NewHBox(
-	//	barContainer,
-	//	container.NewCenter(container.NewVBox(container.NewCenter(stateContent), container.NewCenter(p.timeText))),
-	//	statsContainer,
-	//)
-
-	//return container.NewBorder(
-	//	topBox,
-	//	nil,
-	//	nil,
-	//	nil,
-	//	container.NewVBox(
-	//		container.NewCenter(stateContent),
-	//		container.NewCenter(p.timeText),
-	//	),
-	//)
 }
 
 func (p *MyApp) toggleTimer() {
@@ -971,4 +949,35 @@ func (p *ProportionalLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 
 	// 最小宽度为三个区域最小宽度之和
 	return fyne.NewSize(p.leftMin+p.centerMin+p.rightMin, minHeight)
+}
+
+type CustomVBoxLayout struct {
+	Padding float32
+}
+
+func (l *CustomVBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	y := float32(0)
+	for _, obj := range objects {
+		minSize := obj.MinSize()
+		obj.Resize(fyne.NewSize(size.Width, minSize.Height))
+		obj.Move(fyne.NewPos(0, y))
+		y += minSize.Height + l.Padding
+	}
+}
+
+func (l *CustomVBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	height := float32(0)
+	maxWidth := float32(0)
+
+	for i, obj := range objects {
+		minSize := obj.MinSize()
+		maxWidth = fyne.Max(maxWidth, minSize.Width)
+		height += minSize.Height
+
+		if i < len(objects)-1 {
+			height += l.Padding
+		}
+	}
+
+	return fyne.NewSize(maxWidth, height)
 }
