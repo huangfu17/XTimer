@@ -43,7 +43,8 @@ const (
 )
 
 const (
-	defaultEmpty = ""
+	defaultEmpty    = ""
+	defaultImagPath = "assets/back.jpg"
 )
 
 var (
@@ -619,14 +620,14 @@ func (p *MyApp) loadSettings() {
 		WorkTime:        45,
 		BreakTime:       15,
 		WorkInformPath:  defaultEmpty,
-		BgImgPath:       defaultEmpty,
+		BgImgPath:       defaultImagPath,
 		BreakInformPath: defaultEmpty,
 		WorkColorText:   colorToHex(workColor),
 		BreakColorText:  colorToHex(breakColor),
 		NoteColorText:   colorToHex(noteColor),
 		StatColorText:   colorToHex(statColor),
 		Width:           430,
-		Height:          270,
+		Height:          238,
 	}
 
 	if _, err := os.Stat("settings.json"); os.IsNotExist(err) {
@@ -658,6 +659,9 @@ func (p *MyApp) loadSettings() {
 	}
 	if p.setting.NoteColorText == "" {
 		p.setting.NoteColorText = colorToHex(noteColor)
+	}
+	if p.setting.BgImgPath == "" {
+		p.setting.BgImgPath = defaultImagPath
 	}
 }
 
@@ -737,7 +741,7 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 	}
 	formItems = append(formItems, widget.NewFormItem("统计字色:", statColorEntry))
 
-	p.setting.bgPathText = widget.NewLabel("未设置")
+	p.setting.bgPathText = widget.NewLabel(defaultImagPath)
 	if p.setting.BgImgPath != "" {
 		p.setting.bgPathText.SetText(truncatePath(p.setting.BgImgPath, 50))
 	}
