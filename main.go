@@ -137,10 +137,12 @@ type TaskRecord struct {
 }
 
 type settings struct {
-	WorkTime        int    `json:"workTime"`
-	BreakTime       int    `json:"breakTime"`
-	WorkInformPath  string `json:"workInformPath"`
-	BreakInformPath string `json:"breakInformPath"`
+	WorkTime        int     `json:"workTime"`
+	BreakTime       int     `json:"breakTime"`
+	WorkInformPath  string  `json:"workInformPath"`
+	BreakInformPath string  `json:"breakInformPath"`
+	Height          float32 `json:"height"`
+	Width           float32 `json:"width"`
 	workPathText    *widget.Label
 	breakPathText   *widget.Label
 }
@@ -159,7 +161,6 @@ func main() {
 	}
 
 	pomodoro.window = myApp.NewWindow("XTimer")
-	pomodoro.window.Resize(fyne.NewSize(400, 250))
 
 	myApp.Lifecycle().SetOnStopped(func() {
 		if pomodoro.ticker != nil {
@@ -172,8 +173,6 @@ func main() {
 			}
 		}
 	})
-
-	pomodoro.window.SetIcon(logoImage)
 
 	pomodoro.initResources()
 	pomodoro.loadSettings()
@@ -188,9 +187,10 @@ func main() {
 	pomodoro.pomodoroCount, _ = pomodoro.countRecordByDate(pomodoro.today)
 	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
 
-	content := container.NewStack(canvas.NewRectangle(bgColor), pomodoro.createUI())
+	content := container.NewStack(canvas.NewRectangle(color.Transparent), pomodoro.createUI())
 
 	pomodoro.window.SetCloseIntercept(func() {
+		pomodoro.saveSettings()
 		closeDialog := dialog.NewCustomConfirm(
 			"关闭确认",
 			"关闭",
@@ -204,6 +204,9 @@ func main() {
 		closeDialog.Show()
 	})
 
+	pomodoro.window.SetIcon(logoImage)
+	pomodoro.window.Resize(fyne.NewSize(pomodoro.setting.Width, pomodoro.setting.Height))
+	pomodoro.window.SetPadded(false)
 	pomodoro.window.SetContent(content)
 	pomodoro.window.ShowAndRun()
 
@@ -259,7 +262,6 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 
 	p.timeText = canvas.NewText(formatDuration(p.remaining), workColor)
 	p.timeText.TextSize = 120
-	//p.timeText.FontSource = font
 
 	p.startBtn = widget.NewButtonWithIcon("", theme.MediaPlayIcon(), p.toggleTimer)
 	p.startBtn.Importance = widget.HighImportance
@@ -275,17 +277,15 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	})
 	p.resetBtn.Importance = widget.DangerImportance
 
-	p.statCountText = canvas.NewText(p.getPomodoroCount(), color.RGBA{R: 50, G: 120, B: 50, A: 255})
+	p.statCountText = canvas.NewText(p.getPomodoroCount(), breakColor)
 	p.statCountText.TextSize = 20
 
-	p.statTimeText = canvas.NewText(p.getPomodoroTime(), color.RGBA{R: 50, G: 120, B: 50, A: 255})
+	p.statTimeText = canvas.NewText(p.getPomodoroTime(), breakColor)
 	p.statTimeText.TextSize = 20
 
 	countIcon := widget.NewIcon(pomodoroImage)
 	timeIcon := widget.NewIcon(clockImage)
 
-	//textContainer := container.NewVBox(p.statCountText)
-	//countItem := container.NewGridWithColumns(2, timeIcon, textContainer)
 	countItem := container.NewHBox(
 		countIcon,
 		container.NewVBox(
@@ -300,24 +300,10 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		),
 	)
 
-	//topBox := container.NewHBox(
-	//	barContainer,
-	//	layout.NewSpacer(),
-	//	statsContainer,
-	//)
-
-	//buttonBox := container.NewHBox(
-	//	layout.NewSpacer(),
-	//	p.doBar,
-	//	layout.NewSpacer(),
-	//	layout.NewSpacer(),
-	//	p.resetBar,
-	//	layout.NewSpacer(),
-	//)
 	statsContainer := container.NewVBox(countItem, timeItem)
 	statsContainer = container.NewPadded(statsContainer)
 
-	barContainer := container.NewVBox(toolbar, p.doBar, p.resetBar)
+	barContainer := container.NewVBox(toolbar, p.resetBar, p.doBar)
 	barContainer = container.NewPadded(barContainer)
 
 	finalLayout := container.New(NewProportionalLayout(0.15, 0.7, 0.15, 110, 200, 112),
@@ -344,7 +330,6 @@ func (p *MyApp) toggleTimer() {
 }
 
 func (p *MyApp) startTimer() {
-	//init
 	if p.currentState == stateIdle {
 		if p.nextState == stateWorking {
 			p.total = time.Duration(p.setting.WorkTime) * time.Minute
@@ -426,8 +411,8 @@ func (p *MyApp) timerComplete() {
 }
 
 func (p *MyApp) transitionState(newState state) {
+	p.checkAndRefreshToday()
 	p.currentState = newState
-
 	switch newState {
 	case stateWorking:
 		p.total = time.Duration(p.setting.WorkTime) * time.Minute
@@ -465,6 +450,7 @@ func (p *MyApp) showNotification() {
 		soundFile = p.setting.BreakInformPath
 		p.updatePomodoro()
 		p.saveTaskRecord()
+		p.checkAndRefreshToday()
 	} else {
 		title = "继续工作了！"
 		message = "休息结束，要工作了，加油！"
@@ -511,6 +497,25 @@ func (p *MyApp) updatePomodoro() {
 	})
 }
 
+func (p *MyApp) checkAndRefreshToday() {
+	currentDay := time.Now().Format("2006-01-02")
+	if p.today != currentDay {
+		p.logInfo("[Today] refresh.")
+		p.today = currentDay
+		p.pomodoroCount, _ = p.countRecordByDate(p.today)
+		p.pomodoroTime, _ = p.countRecordByDate(p.today)
+		fyne.Do(func() {
+			p.statTimeText.Text = p.getPomodoroTime()
+			p.statCountText.Text = p.getPomodoroCount()
+
+			p.statTimeText.Refresh()
+			p.statCountText.Refresh()
+		})
+	} else {
+		p.logInfo("[Today] equals, day=", currentDay)
+	}
+}
+
 func (p *MyApp) saveTaskRecord() {
 	record := TaskRecord{
 		Date:      p.startTime.Format("2006-01-02"),
@@ -548,6 +553,8 @@ func (p *MyApp) loadSettings() {
 		BreakTime:       15,
 		WorkInformPath:  defaultWorkInformPath,
 		BreakInformPath: defaultBreakInformPath,
+		Width:           430,
+		Height:          270,
 	}
 
 	if _, err := os.Stat("settings.json"); os.IsNotExist(err) {
@@ -580,7 +587,10 @@ func (p *MyApp) loadSettings() {
 }
 
 func (p *MyApp) saveSettings() {
+	p.setting.Width = p.window.Canvas().Size().Width
+	p.setting.Height = p.window.Canvas().Size().Height
 	jsonData, err := json.MarshalIndent(p.setting, "", "  ")
+	p.logInfo("settings update:", p.setting)
 	if err != nil {
 		p.logError("编码设置失败:", err)
 		return
@@ -854,7 +864,6 @@ func (p *MyApp) playSoundWithBeep(filePath string) {
 	<-done
 }
 
-// ProportionalLayout 带最小尺寸限制的比例布局
 type ProportionalLayout struct {
 	leftRatio   float32 // 左侧区域比例
 	centerRatio float32 // 中间区域比例
@@ -864,7 +873,6 @@ type ProportionalLayout struct {
 	rightMin    float32 // 右侧最小宽度
 }
 
-// NewProportionalLayout 创建新的比例布局
 func NewProportionalLayout(left, center, right, leftMin, centerMin, rightMin float32) *ProportionalLayout {
 	return &ProportionalLayout{
 		leftRatio:   left,
@@ -876,21 +884,17 @@ func NewProportionalLayout(left, center, right, leftMin, centerMin, rightMin flo
 	}
 }
 
-// Layout 实现布局接口
 func (p *ProportionalLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	if len(objects) != 3 {
 		return // 必须有三个对象：左、中、右
 	}
 
-	// 计算总比例
 	totalRatio := p.leftRatio + p.centerRatio + p.rightRatio
 
-	// 计算各区域初始宽度
 	leftWidth := size.Width * p.leftRatio / totalRatio
 	centerWidth := size.Width * p.centerRatio / totalRatio
 	rightWidth := size.Width * p.rightRatio / totalRatio
 
-	// 应用最小宽度限制，记录需要补偿的差值
 	leftDelta := float32(0)
 	if leftWidth < p.leftMin {
 		leftDelta = p.leftMin - leftWidth
@@ -909,36 +913,28 @@ func (p *ProportionalLayout) Layout(objects []fyne.CanvasObject, size fyne.Size)
 		rightWidth = p.rightMin
 	}
 
-	// 计算总差值
 	totalDelta := leftDelta + centerDelta + rightDelta
 
-	// 如果总差值大于0，需要从其他区域扣除
 	if totalDelta > 0 {
-		// 计算剩余可分配宽度
 		remaining := size.Width - p.leftMin - p.centerMin - p.rightMin
 		centerWidth = p.centerMin + remaining
 	}
 
-	// 布局左侧区域
 	objects[0].Resize(fyne.NewSize(leftWidth, size.Height))
 	objects[0].Move(fyne.NewPos(0, 0))
 
-	// 布局中间区域
 	objects[1].Resize(fyne.NewSize(centerWidth, size.Height))
 	objects[1].Move(fyne.NewPos(leftWidth, 0))
 
-	// 布局右侧区域
 	objects[2].Resize(fyne.NewSize(rightWidth, size.Height))
 	objects[2].Move(fyne.NewPos(leftWidth+centerWidth, 0))
 }
 
-// MinSize 计算最小尺寸
 func (p *ProportionalLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	if len(objects) != 3 {
 		return fyne.NewSize(0, 0)
 	}
 
-	// 计算三个区域的最小高度
 	minHeight := fyne.Max(
 		objects[0].MinSize().Height,
 		fyne.Max(
@@ -947,37 +943,5 @@ func (p *ProportionalLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 		),
 	)
 
-	// 最小宽度为三个区域最小宽度之和
 	return fyne.NewSize(p.leftMin+p.centerMin+p.rightMin, minHeight)
-}
-
-type CustomVBoxLayout struct {
-	Padding float32
-}
-
-func (l *CustomVBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	y := float32(0)
-	for _, obj := range objects {
-		minSize := obj.MinSize()
-		obj.Resize(fyne.NewSize(size.Width, minSize.Height))
-		obj.Move(fyne.NewPos(0, y))
-		y += minSize.Height + l.Padding
-	}
-}
-
-func (l *CustomVBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	height := float32(0)
-	maxWidth := float32(0)
-
-	for i, obj := range objects {
-		minSize := obj.MinSize()
-		maxWidth = fyne.Max(maxWidth, minSize.Width)
-		height += minSize.Height
-
-		if i < len(objects)-1 {
-			height += l.Padding
-		}
-	}
-
-	return fyne.NewSize(maxWidth, height)
 }
