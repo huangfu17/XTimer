@@ -1,13 +1,2 @@
 {
-  "workTime": 2,
-  "breakTime": 1,
-  "workInformPath": "/Users/huangfu/Music/理智/李志 - 下雨.mp3",
-  "bgImgPath": "assets/back.jpg",
-  "breakInformPath": "/Users/huangfu/Music/理智/李志 - 女神.mp3",
-  "height": 238,
-  "width": 430,
-  "workColorText": "#DF5D1F",
-  "breakColorText": "#7EA56A",
-  "noteColorText": "#7EA56A",
-  "statColorText": "#7EA56A"
 }

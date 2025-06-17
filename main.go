@@ -592,7 +592,6 @@ func (p *MyApp) saveTaskRecord() {
 		Duration:  int(math.Ceil(p.total.Minutes())),
 		Type:      "pomodoro",
 	}
-	p.logInfo("insert task record", record)
 	if err := p.addTimeRecord(record); err != nil {
 		p.logInfo("insert task record error.", record, err)
 	}
