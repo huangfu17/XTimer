@@ -143,14 +143,19 @@ type settings struct {
 	BreakInformPath string  `json:"breakInformPath"`
 	Height          float32 `json:"height"`
 	Width           float32 `json:"width"`
+	WorkColorText   string  `json:"workColorText"`
+	BreakColorText  string  `json:"breakColorText"`
+	NoteColorText   string  `json:"noteColorText"`
+	StatColorText   string  `json:"statColorText"`
 	workPathText    *widget.Label
 	breakPathText   *widget.Label
 	bgPathText      *widget.Label
 }
 
-var breakColor = color.RGBA{R: 126, G: 165, B: 106, A: 255}
-var workColor = color.RGBA{R: 223, G: 93, B: 31, A: 255}
-var bgColor = color.RGBA{R: 229, G: 234, B: 197, A: 255}
+var noteColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var statColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var breakColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var workColor color.Color = color.RGBA{R: 223, G: 93, B: 31, A: 255}
 
 func main() {
 	myApp := app.NewWithID("XTimer")
@@ -587,6 +592,10 @@ func (p *MyApp) loadSettings() {
 		WorkInformPath:  defaultEmpty,
 		BgImgPath:       defaultEmpty,
 		BreakInformPath: defaultEmpty,
+		WorkColorText:   colorToHex(workColor),
+		BreakColorText:  colorToHex(breakColor),
+		NoteColorText:   colorToHex(noteColor),
+		StatColorText:   colorToHex(statColor),
 		Width:           430,
 		Height:          270,
 	}
@@ -611,6 +620,15 @@ func (p *MyApp) loadSettings() {
 	}
 	if p.setting.BreakTime == 0 {
 		p.setting.BreakTime = 15
+	}
+	if p.setting.StatColorText == "" {
+		p.setting.StatColorText = colorToHex(statColor)
+	}
+	if p.setting.WorkColorText == "" {
+		p.setting.WorkColorText = colorToHex(workColor)
+	}
+	if p.setting.NoteColorText == "" {
+		p.setting.NoteColorText = colorToHex(noteColor)
 	}
 }
 
@@ -983,4 +1001,87 @@ func (p *ProportionalLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	)
 
 	return fyne.NewSize(p.leftMin+p.centerMin+p.rightMin, minHeight)
+}
+
+// HexToColor 将16进制颜色字符串转换为color.Color
+func hexToColor(hex string) (color.Color, error) {
+	hex = strings.TrimPrefix(hex, "#")
+	hex = strings.TrimPrefix(hex, "0x")
+
+	if len(hex) == 3 {
+		hex = string(hex[0]) + string(hex[0]) +
+			string(hex[1]) + string(hex[1]) +
+			string(hex[2]) + string(hex[2])
+	}
+
+	if len(hex) != 6 && len(hex) != 8 {
+		return color.Transparent, fmt.Errorf("invalid hex color format: %s", hex)
+	}
+
+	var r, g, b, a uint8 = 0, 0, 0, 255
+	var err error
+
+	if r, err = parseHexByte(hex[0:2]); err != nil {
+		return color.Transparent, err
+	}
+	if g, err = parseHexByte(hex[2:4]); err != nil {
+		return color.Transparent, err
+	}
+	if b, err = parseHexByte(hex[4:6]); err != nil {
+		return color.Transparent, err
+	}
+
+	if len(hex) == 8 {
+		if a, err = parseHexByte(hex[6:8]); err != nil {
+			return color.Transparent, err
+		}
+	}
+
+	return color.NRGBA{R: r, G: g, B: b, A: a}, nil
+}
+
+func parseHexByte(hex string) (uint8, error) {
+	val, err := strconv.ParseUint(hex, 16, 8)
+	if err != nil {
+		return 0, fmt.Errorf("invalid hex byte: %s", hex)
+	}
+	return uint8(val), nil
+}
+
+func colorToHex(c color.Color) string {
+	r, g, b, a := c.RGBA()
+
+	r8 := uint8(r >> 8)
+	g8 := uint8(g >> 8)
+	b8 := uint8(b >> 8)
+	a8 := uint8(a >> 8)
+
+	if a8 != 255 {
+		return fmt.Sprintf("#%02X%02X%02X%02X", r8, g8, b8, a8)
+	}
+
+	return fmt.Sprintf("#%02X%02X%02X", r8, g8, b8)
+}
+
+type fixedWidthEntryLayout struct {
+	width, height float32
+}
+
+func (f *fixedWidthEntryLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) == 0 {
+		return
+	}
+	entry := objects[0]
+	entry.Resize(fyne.NewSize(f.width, f.height))
+	entry.Move(fyne.NewPos(0, 0))
+}
+
+func (f *fixedWidthEntryLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	return fyne.NewSize(f.width, f.height)
+}
+
+// 创建固定宽度Entry
+func newFixedWidthEntry(width, height float32) *fyne.Container {
+	entry := widget.NewEntry()
+	return container.New(&fixedWidthEntryLayout{width: width, height: height}, entry)
 }
