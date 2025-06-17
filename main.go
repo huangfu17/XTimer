@@ -18,6 +18,7 @@ import (
 	"github.com/faiface/beep/speaker"
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"image"
 	"image/color"
 	"io"
 	"log"
@@ -80,6 +81,7 @@ type MyApp struct {
 	statTimeText     *canvas.Text
 	statCountText    *canvas.Text
 	bgImage          *canvas.Image
+	content          *fyne.Container
 	doBar            *widget.Toolbar
 	doBarAction      *widget.ToolbarAction
 	resetBar         *widget.Toolbar
@@ -187,8 +189,11 @@ func main() {
 	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
 
 	pomodoro.bgImage = canvas.NewImageFromFile(pomodoro.setting.BgImgPath)
+	//pomodoro.bgImage = createTransparentImage(pomodoro.setting.BgImgPath, 120)
+	//overlay := canvas.NewRectangle(color.NRGBA{R: 229, G: 234, B: 197, A: 200}) // 50% 透明
+	//overlay.Resize(pomodoro.window.Canvas().Size())
 	pomodoro.bgImage.FillMode = canvas.ImageFillStretch
-	content := container.NewStack(pomodoro.bgImage, pomodoro.createUI())
+	pomodoro.content = container.NewStack(pomodoro.bgImage, pomodoro.createUI())
 
 	pomodoro.window.SetCloseIntercept(func() {
 		pomodoro.setting.Width = pomodoro.window.Canvas().Size().Width
@@ -210,9 +215,44 @@ func main() {
 	pomodoro.window.SetIcon(logoImage)
 	pomodoro.window.Resize(fyne.NewSize(pomodoro.setting.Width, pomodoro.setting.Height))
 	pomodoro.window.SetPadded(false)
-	pomodoro.window.SetContent(content)
+	pomodoro.window.SetContent(pomodoro.content)
 	pomodoro.window.ShowAndRun()
 
+}
+
+func createTransparentImage(imgPath string, alpha uint8) *canvas.Image {
+	file, err := os.Open(imgPath)
+	if err != nil {
+		log.Println("无法打开图像:", err)
+		return canvas.NewImageFromResource(theme.FyneLogo())
+	}
+	defer file.Close()
+
+	// 解码图像
+	srcImg, _, err := image.Decode(file)
+	if err != nil {
+		log.Println("无法解码图像:", err)
+		return canvas.NewImageFromResource(theme.FyneLogo())
+	}
+
+	bounds := srcImg.Bounds()
+
+	transparentImg := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+
+	for y := 0; y < bounds.Dy(); y++ {
+		for x := 0; x < bounds.Dx(); x++ {
+			origColor := srcImg.At(x, y)
+			r, g, b, _ := origColor.RGBA()
+			newColor := color.NRGBA{
+				R: uint8(r >> 8),
+				G: uint8(g >> 8),
+				B: uint8(b >> 8),
+				A: alpha, // 设置透明度
+			}
+			transparentImg.Set(x, y, newColor)
+		}
+	}
+	return canvas.NewImageFromImage(transparentImg)
 }
 
 func loadResource(path string) (fyne.Resource, error) {
@@ -228,7 +268,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
 			p.setting.Width = p.window.Canvas().Size().Width
 			p.setting.Height = p.window.Canvas().Size().Height
-			p.window.Resize(fyne.NewSize(430, 250))
+			p.window.Resize(fyne.NewSize(400, 300))
 			settingsDialog := dialog.NewCustomConfirm(
 				"设置",
 				"保存",
@@ -242,7 +282,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 				},
 				p.window,
 			)
-			settingsDialog.Resize(fyne.NewSize(430, 250))
+			settingsDialog.Resize(fyne.NewSize(400, 300))
 			settingsDialog.Show()
 		}),
 	)
@@ -652,8 +692,8 @@ func (p *MyApp) selectBgImgFile() {
 	p.selectFile(func(filePath string) {
 		p.setting.BgImgPath = filePath
 		p.setting.bgPathText.SetText(truncatePath(filePath, 30))
-		p.bgImage = canvas.NewImageFromFile(p.setting.BgImgPath)
-		p.bgImage.Refresh()
+		p.content.Objects[0] = canvas.NewImageFromFile(p.setting.BgImgPath)
+		p.content.Refresh()
 	}, "img")
 }
 
