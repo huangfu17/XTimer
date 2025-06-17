@@ -79,6 +79,7 @@ type MyApp struct {
 	statImage        *canvas.Image
 	statTimeText     *canvas.Text
 	statCountText    *canvas.Text
+	bgImage          *canvas.Image
 	doBar            *widget.Toolbar
 	doBarAction      *widget.ToolbarAction
 	resetBar         *widget.Toolbar
@@ -136,11 +137,13 @@ type settings struct {
 	WorkTime        int     `json:"workTime"`
 	BreakTime       int     `json:"breakTime"`
 	WorkInformPath  string  `json:"workInformPath"`
+	BgImgPath       string  `json:"bgImgPath"`
 	BreakInformPath string  `json:"breakInformPath"`
 	Height          float32 `json:"height"`
 	Width           float32 `json:"width"`
 	workPathText    *widget.Label
 	breakPathText   *widget.Label
+	bgPathText      *widget.Label
 }
 
 var breakColor = color.RGBA{R: 126, G: 165, B: 106, A: 255}
@@ -183,7 +186,9 @@ func main() {
 	pomodoro.pomodoroCount, _ = pomodoro.countRecordByDate(pomodoro.today)
 	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
 
-	content := container.NewStack(canvas.NewRectangle(color.Transparent), pomodoro.createUI())
+	pomodoro.bgImage = canvas.NewImageFromFile(pomodoro.setting.BgImgPath)
+	pomodoro.bgImage.FillMode = canvas.ImageFillStretch
+	content := container.NewStack(pomodoro.bgImage, pomodoro.createUI())
 
 	pomodoro.window.SetCloseIntercept(func() {
 		pomodoro.setting.Width = pomodoro.window.Canvas().Size().Width
@@ -546,6 +551,7 @@ func (p *MyApp) loadSettings() {
 		WorkTime:        45,
 		BreakTime:       15,
 		WorkInformPath:  defaultEmpty,
+		BgImgPath:       defaultEmpty,
 		BreakInformPath: defaultEmpty,
 		Width:           430,
 		Height:          270,
@@ -604,6 +610,12 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 		}
 	}
 
+	p.setting.bgPathText = widget.NewLabel("未设置")
+	if p.setting.BgImgPath != "" {
+		p.setting.bgPathText.SetText(truncatePath(p.setting.BgImgPath, 30))
+	}
+	selectBgImgBtn := widget.NewButton("更改", p.selectBgImgFile)
+
 	p.setting.workPathText = widget.NewLabel("未设置")
 	if p.setting.WorkInformPath != "" {
 		p.setting.workPathText.SetText(truncatePath(p.setting.WorkInformPath, 30))
@@ -621,6 +633,8 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 		layout.NewSpacer(),
 		container.NewHBox(widget.NewLabel("休息钟:"), breakEntry, widget.NewLabel("分钟")),
 		layout.NewSpacer(),
+		container.NewHBox(widget.NewLabel("背景图:"), p.setting.bgPathText, selectBgImgBtn),
+		layout.NewSpacer(),
 		container.NewHBox(widget.NewLabel("上课铃:"), p.setting.workPathText, selectWorkInformBtn),
 		layout.NewSpacer(),
 		container.NewHBox(widget.NewLabel("下课铃:"), p.setting.breakPathText, selectBreakInformBtn),
@@ -628,20 +642,29 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 }
 
 func (p *MyApp) selectWorkFile() {
-	p.selectSoundFile(func(filePath string) {
+	p.selectFile(func(filePath string) {
 		p.setting.WorkInformPath = filePath
 		p.setting.workPathText.SetText(truncatePath(filePath, 30))
-	})
+	}, "mp3")
+}
+
+func (p *MyApp) selectBgImgFile() {
+	p.selectFile(func(filePath string) {
+		p.setting.BgImgPath = filePath
+		p.setting.bgPathText.SetText(truncatePath(filePath, 30))
+		p.bgImage = canvas.NewImageFromFile(p.setting.BgImgPath)
+		p.bgImage.Refresh()
+	}, "img")
 }
 
 func (p *MyApp) selectBreakFile() {
-	p.selectSoundFile(func(filePath string) {
+	p.selectFile(func(filePath string) {
 		p.setting.BreakInformPath = filePath
 		p.setting.breakPathText.SetText(truncatePath(filePath, 30))
-	})
+	}, "mp3")
 }
 
-func (p *MyApp) selectSoundFile(callback func(string)) {
+func (p *MyApp) selectFile(callback func(string), fType string) {
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 		if err != nil || reader == nil {
 			return
@@ -654,11 +677,17 @@ func (p *MyApp) selectSoundFile(callback func(string)) {
 		}(reader)
 
 		filePath := reader.URI().Path()
-		if !isAudioFile(filePath) {
-			dialog.ShowInformation("提示", "请选择MP3音频文件)", p.window)
-			return
+		if fType == "img" {
+			if !isImgFile(filePath) {
+				dialog.ShowInformation("提示", "请选择正确的图片文件)", p.window)
+				return
+			}
+		} else {
+			if !isAudioFile(filePath) {
+				dialog.ShowInformation("提示", "请选择MP3音频文件)", p.window)
+				return
+			}
 		}
-
 		callback(filePath)
 	}, p.window)
 }
@@ -673,6 +702,17 @@ func truncatePath(path string, maxLen int) string {
 func isAudioFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	audioExts := []string{".mp3"}
+	for _, audioExt := range audioExts {
+		if ext == audioExt {
+			return true
+		}
+	}
+	return false
+}
+
+func isImgFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	audioExts := []string{".png", ".svg", ".jpg", ".jpeg", ".gif"}
 	for _, audioExt := range audioExts {
 		if ext == audioExt {
 			return true
