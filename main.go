@@ -42,8 +42,7 @@ const (
 )
 
 const (
-	defaultWorkInformPath  = "assets/Start.mp3"
-	defaultBreakInformPath = "assets/End.mp3"
+	defaultEmpty = ""
 )
 
 var (
@@ -57,8 +56,6 @@ var (
 
 func (p *MyApp) initResources() {
 
-	_, _ = loadResource(defaultWorkInformPath)
-	_, _ = loadResource(defaultBreakInformPath)
 	logoImage, _ = loadResource("assets/Logo.png")
 	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
@@ -83,9 +80,8 @@ type MyApp struct {
 	statTimeText     *canvas.Text
 	statCountText    *canvas.Text
 	doBar            *widget.Toolbar
+	doBarAction      *widget.ToolbarAction
 	resetBar         *widget.Toolbar
-	startBtn         *widget.Button
-	resetBtn         *widget.Button
 	setting          *settings
 	currentState     state
 	nextState        state
@@ -117,7 +113,7 @@ type Logger struct {
 	*log.Logger
 }
 
-type LoggerConfig struct {
+type loggerConfig struct {
 	LogPath      string
 	LogFileName  string
 	MaxSize      int
@@ -127,7 +123,7 @@ type LoggerConfig struct {
 	ConsolePrint bool
 }
 
-type TaskRecord struct {
+type taskRecord struct {
 	ID        int       `json:"id"`
 	Date      string    `json:"date"`
 	StartTime time.Time `json:"startTime"`
@@ -190,6 +186,8 @@ func main() {
 	content := container.NewStack(canvas.NewRectangle(color.Transparent), pomodoro.createUI())
 
 	pomodoro.window.SetCloseIntercept(func() {
+		pomodoro.setting.Width = pomodoro.window.Canvas().Size().Width
+		pomodoro.setting.Height = pomodoro.window.Canvas().Size().Height
 		pomodoro.saveSettings()
 		closeDialog := dialog.NewCustomConfirm(
 			"关闭确认",
@@ -223,6 +221,9 @@ func loadResource(path string) (fyne.Resource, error) {
 func (p *MyApp) createUI() fyne.CanvasObject {
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
+			p.setting.Width = p.window.Canvas().Size().Width
+			p.setting.Height = p.window.Canvas().Size().Height
+			p.window.Resize(fyne.NewSize(430, 250))
 			settingsDialog := dialog.NewCustomConfirm(
 				"设置",
 				"保存",
@@ -232,6 +233,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 					if confirmed {
 						p.saveSettings()
 					}
+					p.window.Resize(fyne.NewSize(p.setting.Width, p.setting.Height))
 				},
 				p.window,
 			)
@@ -240,8 +242,19 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		}),
 	)
 
-	p.doBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaPlayIcon(), p.toggleTimer))
-	p.resetBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaStopIcon(), p.resetTimer))
+	p.doBarAction = widget.NewToolbarAction(theme.MediaPlayIcon(), p.toggleTimer)
+	p.doBar = widget.NewToolbar(p.doBarAction)
+	p.resetBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaStopIcon(),
+		func() {
+			informDialog := dialog.NewCustomConfirm("确认重置", "确定", "手滑",
+				container.NewCenter(canvas.NewText("重置将会清除当前状态和进度，确认吗？", workColor)), func(confirmed bool) {
+					if confirmed {
+						p.resetTimer()
+					}
+				}, p.window)
+			informDialog.Resize(fyne.NewSize(300, 250))
+			informDialog.Show()
+		}))
 
 	p.stateText = canvas.NewText("准备开始", breakColor)
 	p.stateText.TextSize = 24
@@ -262,20 +275,6 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 
 	p.timeText = canvas.NewText(formatDuration(p.remaining), workColor)
 	p.timeText.TextSize = 120
-
-	p.startBtn = widget.NewButtonWithIcon("", theme.MediaPlayIcon(), p.toggleTimer)
-	p.startBtn.Importance = widget.HighImportance
-	p.resetBtn = widget.NewButtonWithIcon("", theme.MediaStopIcon(), func() {
-		informDialog := dialog.NewCustomConfirm("确认重置", "确定", "手滑",
-			container.NewCenter(canvas.NewText("重置将会清除当前状态和进度，确认吗？", theme.TextColor())), func(confirmed bool) {
-				if confirmed {
-					p.resetTimer()
-				}
-			}, p.window)
-		informDialog.Resize(fyne.NewSize(200, 150))
-		informDialog.Show()
-	})
-	p.resetBtn.Importance = widget.DangerImportance
 
 	p.statCountText = canvas.NewText(p.getPomodoroCount(), breakColor)
 	p.statCountText.TextSize = 20
@@ -306,7 +305,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	barContainer := container.NewVBox(toolbar, p.resetBar, p.doBar)
 	barContainer = container.NewPadded(barContainer)
 
-	finalLayout := container.New(NewProportionalLayout(0.15, 0.7, 0.15, 110, 200, 112),
+	finalLayout := container.New(newProportionalLayout(0.15, 0.7, 0.15, 110, 200, 112),
 		barContainer,
 		container.NewCenter(
 			container.NewVBox(
@@ -347,10 +346,7 @@ func (p *MyApp) startTimer() {
 	p.lastStartTime = time.Now()
 	p.isRunning = true
 	p.transitionState(p.nextState)
-	p.startBtn.SetText("暂停")
-	p.startBtn.SetIcon(theme.MediaPauseIcon())
-	p.startBtn.Importance = widget.WarningImportance
-	p.resetBtn.Enable()
+	p.doBarAction.SetIcon(theme.MediaPauseIcon())
 
 	if p.ticker != nil {
 		p.ticker.Stop()
@@ -385,9 +381,7 @@ func (p *MyApp) startTimer() {
 func (p *MyApp) pauseTimer() {
 	p.isRunning = false
 	p.transitionState(statePause)
-	p.startBtn.SetText("继续")
-	p.startBtn.SetIcon(theme.MediaPlayIcon())
-	p.startBtn.Importance = widget.HighImportance
+	p.doBarAction.SetIcon(theme.MediaPlayIcon())
 
 	if p.ticker != nil {
 		p.ticker.Stop()
@@ -402,7 +396,7 @@ func (p *MyApp) resetTimer() {
 	p.remaining = p.total
 	p.timeText.Text = formatDuration(p.remaining)
 	p.timeText.Color = workColor
-	p.startBtn.SetText("开始")
+	p.doBarAction.SetIcon(theme.MediaPlayIcon())
 }
 
 func (p *MyApp) timerComplete() {
@@ -517,7 +511,7 @@ func (p *MyApp) checkAndRefreshToday() {
 }
 
 func (p *MyApp) saveTaskRecord() {
-	record := TaskRecord{
+	record := taskRecord{
 		Date:      p.startTime.Format("2006-01-02"),
 		StartTime: p.startTime,
 		EndTime:   time.Now(),
@@ -543,7 +537,7 @@ func (p *MyApp) getPomodoroCount() string {
 }
 
 func (p *MyApp) getPomodoroTime() string {
-	return fmt.Sprintf(": %d分钟", 123)
+	return fmt.Sprintf(": %d分", p.pomodoroTime)
 }
 
 func (p *MyApp) loadSettings() {
@@ -551,8 +545,8 @@ func (p *MyApp) loadSettings() {
 	p.setting = &settings{
 		WorkTime:        45,
 		BreakTime:       15,
-		WorkInformPath:  defaultWorkInformPath,
-		BreakInformPath: defaultBreakInformPath,
+		WorkInformPath:  defaultEmpty,
+		BreakInformPath: defaultEmpty,
 		Width:           430,
 		Height:          270,
 	}
@@ -578,17 +572,9 @@ func (p *MyApp) loadSettings() {
 	if p.setting.BreakTime == 0 {
 		p.setting.BreakTime = 15
 	}
-	if p.setting.BreakInformPath == "" {
-		p.setting.BreakInformPath = defaultBreakInformPath
-	}
-	if p.setting.WorkInformPath == "" {
-		p.setting.WorkInformPath = defaultWorkInformPath
-	}
 }
 
 func (p *MyApp) saveSettings() {
-	p.setting.Width = p.window.Canvas().Size().Width
-	p.setting.Height = p.window.Canvas().Size().Height
 	jsonData, err := json.MarshalIndent(p.setting, "", "  ")
 	p.logInfo("settings update:", p.setting)
 	if err != nil {
@@ -618,34 +604,26 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 		}
 	}
 
-	p.setting.workPathText = widget.NewLabel("默认")
+	p.setting.workPathText = widget.NewLabel("未设置")
 	if p.setting.WorkInformPath != "" {
 		p.setting.workPathText.SetText(truncatePath(p.setting.WorkInformPath, 30))
 	}
 	selectWorkInformBtn := widget.NewButton("更改", p.selectWorkFile)
-	resetWorkInformBtn := widget.NewButton("重置", func() {
-		p.setting.WorkInformPath = defaultWorkInformPath
-		p.setting.workPathText.SetText(defaultWorkInformPath)
-	})
 
-	p.setting.breakPathText = widget.NewLabel("默认")
+	p.setting.breakPathText = widget.NewLabel("未设置")
 	if p.setting.BreakInformPath != "" {
 		p.setting.breakPathText.SetText(truncatePath(p.setting.BreakInformPath, 30))
 	}
 	selectBreakInformBtn := widget.NewButton("更改", p.selectBreakFile)
-	resetBreakInformBtn := widget.NewButton("重置", func() {
-		p.setting.BreakInformPath = defaultBreakInformPath
-		p.setting.breakPathText.SetText(defaultBreakInformPath)
-	})
 
 	return container.NewVBox(
 		container.NewHBox(widget.NewLabel("番茄钟:"), workEntry, widget.NewLabel("分钟")),
 		layout.NewSpacer(),
 		container.NewHBox(widget.NewLabel("休息钟:"), breakEntry, widget.NewLabel("分钟")),
 		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("上课铃:"), p.setting.workPathText, selectWorkInformBtn, resetWorkInformBtn),
+		container.NewHBox(widget.NewLabel("上课铃:"), p.setting.workPathText, selectWorkInformBtn),
 		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("下课铃:"), p.setting.breakPathText, selectBreakInformBtn, resetBreakInformBtn),
+		container.NewHBox(widget.NewLabel("下课铃:"), p.setting.breakPathText, selectBreakInformBtn),
 	)
 }
 
@@ -704,7 +682,7 @@ func isAudioFile(path string) bool {
 }
 
 func newDefaultLogger() *Logger {
-	return newLogger(&LoggerConfig{
+	return newLogger(&loggerConfig{
 		LogPath:      "./logs",
 		LogFileName:  "app",
 		MaxSize:      20,
@@ -715,7 +693,7 @@ func newDefaultLogger() *Logger {
 	})
 }
 
-func newLogger(config *LoggerConfig) *Logger {
+func newLogger(config *loggerConfig) *Logger {
 	if err := os.MkdirAll(config.LogPath, 0755); err != nil {
 		panic(fmt.Sprintf("无法创建日志目录: %s", config.LogPath))
 	}
@@ -764,7 +742,7 @@ func (p *MyApp) initDatabase() error {
 	return nil
 }
 
-func (p *MyApp) addTimeRecord(record TaskRecord) error {
+func (p *MyApp) addTimeRecord(record taskRecord) error {
 	_, err := p.db.Exec(
 		INSERT_SQL,
 		record.Date,
@@ -807,32 +785,9 @@ func (p *MyApp) ensureFocus() {
 
 func (p *MyApp) playSound(filePath string) {
 	if filePath == "" {
-		filePath = defaultWorkInformPath
+		return
 	}
 	p.playSoundWithBeep(filePath)
-
-	//switch runtime.GOOS {
-	//case "darwin":
-	//	err := exec.Command("afplay", filePath).Start()
-	//	if err != nil {
-	//		p.logError("play audio failed.", err)
-	//	}
-	//case "windows":
-	//	playSoundWithBeep(filePath)
-	//	//err := exec.Command("cmd", "/c", "start", filePath).Start()
-	//	//if err != nil {
-	//	//	if err != nil {
-	//	//		p.logError("play audio failed.", err)
-	//	//	}
-	//	//}
-	//case "linux":
-	//	err := exec.Command("aplay", filePath).Start()
-	//	if err != nil {
-	//		if err != nil {
-	//			p.logError("play audio failed.", err)
-	//		}
-	//	}
-	//}
 }
 
 func (p *MyApp) playSoundWithBeep(filePath string) {
@@ -842,25 +797,36 @@ func (p *MyApp) playSoundWithBeep(filePath string) {
 		p.logError("open mp3 file error", err)
 		return
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			p.logError("close mp3 file error", err)
+		}
+	}(f)
 
 	streamer, format, err := mp3.Decode(f)
 	if err != nil {
 		p.logError("decode mp3 file error", err)
 		return
 	}
-	defer streamer.Close()
+	defer func(streamer beep.StreamSeekCloser) {
+		err := streamer.Close()
+		if err != nil {
+			p.logError("close mp3 stream file error", err)
+		}
+	}(streamer)
 
-	// 初始化扬声器
-	speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/5))
+	err = speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/5))
+	if err != nil {
+		p.logError("init speaker error", err)
+		return
+	}
 
-	// 播放音频
 	done := make(chan bool)
 	speaker.Play(beep.Seq(streamer, beep.Callback(func() {
 		done <- true
 	})))
 
-	// 等待播放完成
 	<-done
 }
 
@@ -873,7 +839,7 @@ type ProportionalLayout struct {
 	rightMin    float32 // 右侧最小宽度
 }
 
-func NewProportionalLayout(left, center, right, leftMin, centerMin, rightMin float32) *ProportionalLayout {
+func newProportionalLayout(left, center, right, leftMin, centerMin, rightMin float32) *ProportionalLayout {
 	return &ProportionalLayout{
 		leftRatio:   left,
 		centerRatio: center,
