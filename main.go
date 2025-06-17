@@ -223,7 +223,6 @@ func main() {
 func createTransparentImage(imgPath string, alpha uint8) *canvas.Image {
 	file, err := os.Open(imgPath)
 	if err != nil {
-		log.Println("无法打开图像:", err)
 		return canvas.NewImageFromResource(theme.FyneLogo())
 	}
 	defer file.Close()
@@ -231,7 +230,6 @@ func createTransparentImage(imgPath string, alpha uint8) *canvas.Image {
 	// 解码图像
 	srcImg, _, err := image.Decode(file)
 	if err != nil {
-		log.Println("无法解码图像:", err)
 		return canvas.NewImageFromResource(theme.FyneLogo())
 	}
 
@@ -370,7 +368,6 @@ func (p *MyApp) toggleTimer() {
 	} else {
 		p.pauseTimer()
 	}
-	p.logInfo("size=", p.window.Canvas().Size())
 }
 
 func (p *MyApp) startTimer() {
@@ -539,7 +536,6 @@ func (p *MyApp) updatePomodoro() {
 func (p *MyApp) checkAndRefreshToday() {
 	currentDay := time.Now().Format("2006-01-02")
 	if p.today != currentDay {
-		p.logInfo("[Today] refresh.")
 		p.today = currentDay
 		p.pomodoroCount, _ = p.countRecordByDate(p.today)
 		p.pomodoroTime, _ = p.countRecordByDate(p.today)
@@ -550,8 +546,6 @@ func (p *MyApp) checkAndRefreshToday() {
 			p.statTimeText.Refresh()
 			p.statCountText.Refresh()
 		})
-	} else {
-		p.logInfo("[Today] equals, day=", currentDay)
 	}
 }
 
@@ -622,7 +616,6 @@ func (p *MyApp) loadSettings() {
 
 func (p *MyApp) saveSettings() {
 	jsonData, err := json.MarshalIndent(p.setting, "", "  ")
-	p.logInfo("settings update:", p.setting)
 	if err != nil {
 		p.logError("编码设置失败:", err)
 		return
