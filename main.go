@@ -58,6 +58,7 @@ var (
 
 func (p *MyApp) initResources() {
 
+	_, _ = loadResource(defaultImagPath)
 	logoImage, _ = loadResource("assets/Logo.png")
 	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")

@@ -1,2 +1,13 @@
 {
+  "workTime": 45,
+  "breakTime": 15,
+  "workInformPath": "",
+  "bgImgPath": "assets/back.jpg",
+  "breakInformPath": "",
+  "height": 500,
+  "width": 500,
+  "workColorText": "#DF5D1F",
+  "breakColorText": "#7EA56A",
+  "noteColorText": "#7EA56A",
+  "statColorText": "#7EA56A"
 }
