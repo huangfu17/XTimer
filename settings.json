@@ -1,9 +1,13 @@
 {
-  "workTime": 45,
-  "breakTime": 15,
-  "workInformPath": "",
-  "bgImgPath": "",
-  "breakInformPath": "",
+  "workTime": 2,
+  "breakTime": 1,
+  "workInformPath": "/Users/huangfu/Music/理智/李志 - 九月.mp3",
+  "bgImgPath": "/Users/huangfu/Downloads/back.jpg",
+  "breakInformPath": "/Users/huangfu/Music/理智/李志 - 下雨\u0026董卓瑶\u0026忽然(2014i／O版).mp3",
   "height": 231,
-  "width": 430
+  "width": 430,
+  "workColorText": "#bf634f",
+  "breakColorText": "#7EA56A",
+  "noteColorText": "#7EA56A",
+  "statColorText": "#7EA56A"
 }
