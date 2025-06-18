@@ -59,7 +59,7 @@ var (
 func (p *MyApp) initResources() {
 
 	_, _ = loadResource(defaultImagPath)
-	logoImage, _ = loadResource("assets/Logo.png")
+	logoImage, _ = loadResource("assets/Logo2.jpeg")
 	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
 	workingImage, _ = loadResource("assets/Working.png")
@@ -484,7 +484,6 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		barContainer,
 		container.NewCenter(
 			container.NewVBox(
-				NewNegativeSpacer(10),
 				container.NewCenter(stateContent),
 				NewNegativeSpacer(-25),
 				container.NewCenter(p.timeText),
