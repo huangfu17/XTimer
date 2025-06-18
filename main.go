@@ -70,6 +70,7 @@ func (p *MyApp) initResources() {
 type MyApp struct {
 	app              fyne.App
 	window           fyne.Window
+	settingsWindow   fyne.Window
 	ticker           *time.Ticker
 	remaining        time.Duration
 	total            time.Duration
@@ -224,8 +225,8 @@ func main() {
 	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
 
 	pomodoro.bgImage = canvas.NewImageFromFile(pomodoro.setting.BgImgPath)
-	//pomodoro.bgImage = createTransparentImage(pomodoro.setting.BgImgPath, 120)
-	//overlay := canvas.NewRectangle(color.NRGBA{R: 229, G: 234, B: 197, A: 200}) // 50% 透明
+	//pomodoro.bgImage = createTransparentImage(pomodoro.setting.BgImgPath, 0)
+	//overlay := canvas.NewRectangle(color.NRGBA{R: 229, G: 234, B: 197, A: 200})
 	//overlay.Resize(pomodoro.window.Canvas().Size())
 	pomodoro.bgImage.FillMode = canvas.ImageFillStretch
 	pomodoro.content = container.NewStack(pomodoro.bgImage, pomodoro.createUI())
@@ -296,9 +297,105 @@ func loadResource(path string) (fyne.Resource, error) {
 	return fyne.NewStaticResource(filepath.Base(path), data), nil
 }
 
+// 打开设置窗口的方法
+func (p *MyApp) showSettingsWindow() {
+	// 如果设置窗口已存在，则将其置于最前
+	if p.settingsWindow != nil {
+		p.settingsWindow.RequestFocus()
+		return
+	}
+
+	// 创建新的设置窗口
+	p.settingsWindow = p.app.NewWindow("设置")
+	p.settingsWindow.SetCloseIntercept(func() {
+		p.settingsWindow.Hide() // 隐藏而不是关闭，以便保留状态
+	})
+
+	// 设置窗口大小
+	p.settingsWindow.Resize(fyne.NewSize(500, 500))
+
+	// 创建设置内容
+	settingsContent := p.createSettingsContent()
+
+	// 创建标题栏（用于拖动）
+	//titleBar := p.createSettingsTitleBar()
+
+	// 创建按钮区域
+	buttonArea := container.NewHBox(
+		layout.NewSpacer(),
+		widget.NewButton("取消", func() {
+			p.settingsWindow.Hide()
+		}),
+		widget.NewButton("保存", func() {
+			p.saveSettings()
+			p.settingsWindow.Hide()
+			p.window.Resize(fyne.NewSize(p.setting.Width, p.setting.Height))
+		}),
+		widget.NewButton("保存并应用", func() {
+			p.saveSettings()
+			p.window.Resize(fyne.NewSize(p.setting.Width, p.setting.Height))
+			// 可以添加其他应用设置的操作
+		}),
+	)
+
+	// 完整布局
+	content := container.NewBorder(
+		//titleBar,   // 顶部标题栏
+		buttonArea, // 底部按钮
+		nil, nil,
+		container.NewVScroll(settingsContent), // 可滚动的设置内容
+	)
+
+	p.settingsWindow.SetContent(content)
+	p.settingsWindow.Show()
+}
+
+// 创建设置窗口的标题栏（可拖动）
+//func (p *MyApp) createSettingsTitleBar() fyne.CanvasObject {
+//	titleLabel := widget.NewLabel("设置")
+//	titleLabel.TextStyle.Bold = true
+//
+//	closeButton := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
+//		if p.settingsWindow != nil {
+//			p.settingsWindow.Hide()
+//		}
+//	})
+//	closeButton.Importance = widget.LowImportance
+//
+//	titleBar := container.NewHBox(
+//		titleLabel,
+//		layout.NewSpacer(),
+//		closeButton,
+//	)
+//
+//	// 添加半透明背景
+//	titleBg := canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 230})
+//	titleContainer := container.NewMax(titleBg, titleBar)
+//
+//	// 实现拖动功能
+//	var dragStart fyne.Position
+//	titleContainer.OnTapped = func(event *fyne.PointEvent) {
+//		dragStart = event.Position
+//	}
+//	titleContainer.AddListener(&fyne.DragListener{
+//		Dragged: func(event *fyne.DragEvent) {
+//			if p.settingsWindow == nil {
+//				return
+//			}
+//			deltaX := event.PointEvent.Position.X - dragStart.X
+//			deltaY := event.PointEvent.Position.Y - dragStart.Y
+//			pos := p.settingsWindow.Position()
+//			p.settingsWindow.Move(fyne.NewPos(pos.X+deltaX, pos.Y+deltaY))
+//		},
+//	})
+//
+//	return titleContainer
+//}
+
 func (p *MyApp) createUI() fyne.CanvasObject {
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
+			//p.showSettingsWindow()
 			p.setting.Width = p.window.Canvas().Size().Width
 			p.setting.Height = p.window.Canvas().Size().Height
 			p.window.Resize(fyne.NewSize(500, 500))
@@ -387,7 +484,9 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 		barContainer,
 		container.NewCenter(
 			container.NewVBox(
+				NewNegativeSpacer(10),
 				container.NewCenter(stateContent),
+				NewNegativeSpacer(-25),
 				container.NewCenter(p.timeText),
 			),
 		),
@@ -1227,3 +1326,36 @@ func newFixedWidthEntry(width, height float32) *fyne.Container {
 	entry := widget.NewEntry()
 	return container.New(&fixedWidthEntryLayout{width: width, height: height}, entry)
 }
+
+type NegativeSpacer struct {
+	widget.BaseWidget
+	height float32
+}
+
+func NewNegativeSpacer(height float32) *NegativeSpacer {
+	s := &NegativeSpacer{height: height}
+	s.ExtendBaseWidget(s)
+	return s
+}
+
+func (s *NegativeSpacer) CreateRenderer() fyne.WidgetRenderer {
+	return &negativeSpacerRenderer{widget: s}
+}
+
+type negativeSpacerRenderer struct {
+	widget *NegativeSpacer
+}
+
+func (r *negativeSpacerRenderer) Layout(size fyne.Size) {}
+
+func (r *negativeSpacerRenderer) MinSize() fyne.Size {
+	return fyne.NewSize(0, r.widget.height)
+}
+
+func (r *negativeSpacerRenderer) Refresh() {}
+
+func (r *negativeSpacerRenderer) Objects() []fyne.CanvasObject {
+	return []fyne.CanvasObject{}
+}
+
+func (r *negativeSpacerRenderer) Destroy() {}
