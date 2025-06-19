@@ -34,7 +34,7 @@ jobs:
           
           # 构建 Windows 应用
           echo "构建 Windows 应用"
-          fyne-cross windows -arch amd64 -icon assets/Logo.png  -app-id "com.kp.XTimer"  -output XTimer.exe
+          fyne-cross windows -arch amd64 -icon assets/Logo2.jpeg  -app-id "com.kp.XTimer"  -output XTimer.exe
           
           # 验证构建结果
           if [ ! -f "fyne-cross/bin/windows-amd64/XTimer.exe" ]; then
