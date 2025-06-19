@@ -58,7 +58,7 @@ var (
 
 func initResources() {
 
-	logoImage, _ = loadResource("assets/Logo3.ico")
+	logoImage, _ = loadResource("assets/Logo.png")
 	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
 	workingImage, _ = loadResource("assets/Working.png")
