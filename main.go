@@ -25,6 +25,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -43,8 +44,7 @@ const (
 )
 
 const (
-	defaultEmpty    = ""
-	defaultImagPath = "assets/back.jpg"
+	defaultEmpty = ""
 )
 
 var (
@@ -56,10 +56,9 @@ var (
 	pauseImage    fyne.Resource
 )
 
-func (p *MyApp) initResources() {
+func initResources() {
 
-	_, _ = loadResource(defaultImagPath)
-	logoImage, _ = loadResource("assets/Logo2.jpeg")
+	logoImage, _ = loadResource("assets/Logo3.ico")
 	clockImage, _ = loadResource("assets/Clock.png")
 	pomodoroImage, _ = loadResource("assets/Pomodoro.png")
 	workingImage, _ = loadResource("assets/Working.png")
@@ -67,8 +66,8 @@ func (p *MyApp) initResources() {
 	pauseImage, _ = loadResource("assets/Pause.png")
 }
 
-type MyApp struct {
-	app              fyne.App
+var (
+	myApp            fyne.App
 	window           fyne.Window
 	settingsWindow   fyne.Window
 	ticker           *time.Ticker
@@ -96,6 +95,9 @@ type MyApp struct {
 	pomodoroTime     int
 	today            string
 	db               *sql.DB
+)
+
+type MyApp struct {
 }
 
 const (
@@ -139,20 +141,19 @@ type taskRecord struct {
 }
 
 type settings struct {
-	WorkTime        int     `json:"workTime"`
-	BreakTime       int     `json:"breakTime"`
-	WorkInformPath  string  `json:"workInformPath"`
-	BgImgPath       string  `json:"bgImgPath"`
-	BreakInformPath string  `json:"breakInformPath"`
-	Height          float32 `json:"height"`
-	Width           float32 `json:"width"`
-	WorkColorText   string  `json:"workColorText"`
-	BreakColorText  string  `json:"breakColorText"`
-	NoteColorText   string  `json:"noteColorText"`
-	StatColorText   string  `json:"statColorText"`
-	workPathText    *widget.Label
-	breakPathText   *widget.Label
-	bgPathText      *widget.Label
+	WorkTime       int    `json:"workTime"`
+	BreakTime      int    `json:"breakTime"`
+	WorkInformPath string `json:"workInformPath"`
+	//BreakInformPath string  `json:"breakInformPath"`
+	Height         float32 `json:"height"`
+	Width          float32 `json:"width"`
+	WorkColorText  string  `json:"workColorText"`
+	BreakColorText string  `json:"breakColorText"`
+	NoteColorText  string  `json:"noteColorText"`
+	StatColorText  string  `json:"statColorText"`
+	workPathText   *widget.Label
+	//breakPathText   *widget.Label
+	bgPathText *widget.Label
 }
 
 var noteColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
@@ -162,97 +163,91 @@ var workColor color.Color = color.RGBA{R: 223, G: 93, B: 31, A: 255}
 
 func main() {
 	myApp := app.NewWithID("XTimer")
-	pomodoro := &MyApp{
-		app:          myApp,
-		currentState: stateIdle,
-		nextState:    stateWorking,
-		logger:       newDefaultLogger(),
-	}
 
-	pomodoro.window = myApp.NewWindow("XTimer")
+	window = myApp.NewWindow("XTimer")
 
 	myApp.Lifecycle().SetOnStopped(func() {
-		if pomodoro.ticker != nil {
-			pomodoro.ticker.Stop()
+		if ticker != nil {
+			ticker.Stop()
 		}
-		if pomodoro.db != nil {
-			err := pomodoro.db.Close()
+		if db != nil {
+			err := db.Close()
 			if err != nil {
-				pomodoro.logError("close db error", err)
+				//mlogError("close db error", err)
 			}
 		}
 	})
 
-	pomodoro.initResources()
-	pomodoro.loadSettings()
+	initResources()
+	loadSettings()
 
-	if pomodoro.setting.WorkColorText != "" {
-		toColor, err := hexToColor(pomodoro.setting.WorkColorText)
+	if setting.WorkColorText != "" {
+		toColor, err := hexToColor(setting.WorkColorText)
 		if err != nil {
 			workColor = toColor
 		}
 	}
 
-	if pomodoro.setting.BreakColorText != "" {
-		toColor, err := hexToColor(pomodoro.setting.BreakColorText)
+	if setting.BreakColorText != "" {
+		toColor, err := hexToColor(setting.BreakColorText)
 		if err != nil {
 			breakColor = toColor
 		}
 	}
 
-	if pomodoro.setting.NoteColorText != "" {
-		toColor, err := hexToColor(pomodoro.setting.NoteColorText)
+	if setting.NoteColorText != "" {
+		toColor, err := hexToColor(setting.NoteColorText)
 		if err != nil {
 			noteColor = toColor
 		}
 	}
 
-	if pomodoro.setting.StatColorText != "" {
-		toColor, err := hexToColor(pomodoro.setting.StatColorText)
+	if setting.StatColorText != "" {
+		toColor, err := hexToColor(setting.StatColorText)
 		if err != nil {
 			statColor = toColor
 		}
 	}
 
-	if err := pomodoro.initDatabase(); err != nil {
-		pomodoro.logError("init database error,", err)
-		dialog.ShowError(err, pomodoro.window)
+	if err := initDatabase(); err != nil {
+		logError("init database error,", err)
+		dialog.ShowError(err, window)
 		return
 	}
 
-	pomodoro.today = time.Now().Format("2006-01-02")
-	pomodoro.pomodoroCount, _ = pomodoro.countRecordByDate(pomodoro.today)
-	pomodoro.pomodoroTime, _ = pomodoro.getTotalWorkTimeByDate(pomodoro.today)
+	today = time.Now().Format("2006-01-02")
+	pomodoroCount, _ = countRecordByDate(today)
+	pomodoroTime, _ = getTotalWorkTimeByDate(today)
 
-	pomodoro.bgImage = canvas.NewImageFromFile(pomodoro.setting.BgImgPath)
+	//pomodoro.bgImage = canvas.NewImageFromFile(pomodoro.setting.BgImgPath)
 	//pomodoro.bgImage = createTransparentImage(pomodoro.setting.BgImgPath, 0)
 	//overlay := canvas.NewRectangle(color.NRGBA{R: 229, G: 234, B: 197, A: 200})
 	//overlay.Resize(pomodoro.window.Canvas().Size())
-	pomodoro.bgImage.FillMode = canvas.ImageFillStretch
-	pomodoro.content = container.NewStack(pomodoro.bgImage, pomodoro.createUI())
+	//pomodoro.bgImage.FillMode = canvas.ImageFillStretch
+	content = container.NewPadded(createUI())
 
-	pomodoro.window.SetCloseIntercept(func() {
-		pomodoro.setting.Width = pomodoro.window.Canvas().Size().Width
-		pomodoro.setting.Height = pomodoro.window.Canvas().Size().Height
-		pomodoro.saveSettings()
+	window.SetCloseIntercept(func() {
+		setting.Width = window.Canvas().Size().Width
+		setting.Height = window.Canvas().Size().Height
+		saveSettings()
 		closeDialog := dialog.NewCustomConfirm(
 			"关闭确认",
 			"关闭",
 			"取消",
 			container.NewCenter(canvas.NewText("确定要关闭应用吗？", theme.TextColor())), func(confirmed bool) {
 				if confirmed {
-					pomodoro.window.Close()
+					window.Close()
 				}
-			}, pomodoro.window)
+			}, window)
 		closeDialog.Resize(fyne.NewSize(200, 150))
 		closeDialog.Show()
 	})
 
-	pomodoro.window.SetIcon(logoImage)
-	pomodoro.window.Resize(fyne.NewSize(pomodoro.setting.Width, pomodoro.setting.Height))
-	pomodoro.window.SetPadded(false)
-	pomodoro.window.SetContent(pomodoro.content)
-	pomodoro.window.ShowAndRun()
+	window.SetIcon(logoImage)
+	window.Resize(fyne.NewSize(setting.Width, setting.Height))
+	window.SetPadded(false)
+	window.SetContent(content)
+	window.ShowAndRun()
 
 }
 
@@ -298,24 +293,24 @@ func loadResource(path string) (fyne.Resource, error) {
 }
 
 // 打开设置窗口的方法
-func (p *MyApp) showSettingsWindow() {
+func showSettingsWindow() {
 	// 如果设置窗口已存在，则将其置于最前
-	if p.settingsWindow != nil {
-		p.settingsWindow.RequestFocus()
+	if settingsWindow != nil {
+		settingsWindow.RequestFocus()
 		return
 	}
 
 	// 创建新的设置窗口
-	p.settingsWindow = p.app.NewWindow("设置")
-	p.settingsWindow.SetCloseIntercept(func() {
-		p.settingsWindow.Hide() // 隐藏而不是关闭，以便保留状态
+	settingsWindow = myApp.NewWindow("设置")
+	settingsWindow.SetCloseIntercept(func() {
+		settingsWindow.Hide() // 隐藏而不是关闭，以便保留状态
 	})
 
 	// 设置窗口大小
-	p.settingsWindow.Resize(fyne.NewSize(500, 500))
+	settingsWindow.Resize(fyne.NewSize(500, 500))
 
 	// 创建设置内容
-	settingsContent := p.createSettingsContent()
+	settingsContent := createSettingsContent()
 
 	// 创建标题栏（用于拖动）
 	//titleBar := p.createSettingsTitleBar()
@@ -324,16 +319,16 @@ func (p *MyApp) showSettingsWindow() {
 	buttonArea := container.NewHBox(
 		layout.NewSpacer(),
 		widget.NewButton("取消", func() {
-			p.settingsWindow.Hide()
+			settingsWindow.Hide()
 		}),
 		widget.NewButton("保存", func() {
-			p.saveSettings()
-			p.settingsWindow.Hide()
-			p.window.Resize(fyne.NewSize(p.setting.Width, p.setting.Height))
+			saveSettings()
+			settingsWindow.Hide()
+			window.Resize(fyne.NewSize(setting.Width, setting.Height))
 		}),
 		widget.NewButton("保存并应用", func() {
-			p.saveSettings()
-			p.window.Resize(fyne.NewSize(p.setting.Width, p.setting.Height))
+			saveSettings()
+			window.Resize(fyne.NewSize(setting.Width, setting.Height))
 			// 可以添加其他应用设置的操作
 		}),
 	)
@@ -346,8 +341,8 @@ func (p *MyApp) showSettingsWindow() {
 		container.NewVScroll(settingsContent), // 可滚动的设置内容
 	)
 
-	p.settingsWindow.SetContent(content)
-	p.settingsWindow.Show()
+	settingsWindow.SetContent(content)
+	settingsWindow.Show()
 }
 
 // 创建设置窗口的标题栏（可拖动）
@@ -392,70 +387,70 @@ func (p *MyApp) showSettingsWindow() {
 //	return titleContainer
 //}
 
-func (p *MyApp) createUI() fyne.CanvasObject {
+func createUI() fyne.CanvasObject {
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
 			//p.showSettingsWindow()
-			p.setting.Width = p.window.Canvas().Size().Width
-			p.setting.Height = p.window.Canvas().Size().Height
-			p.window.Resize(fyne.NewSize(500, 500))
+			setting.Width = window.Canvas().Size().Width
+			setting.Height = window.Canvas().Size().Height
+			window.Resize(fyne.NewSize(500, 400))
 			settingsDialog := dialog.NewCustomConfirm(
 				"设置",
 				"保存",
 				"取消",
-				p.createSettingsContent(),
+				createSettingsContent(),
 				func(confirmed bool) {
 					if confirmed {
-						p.saveSettings()
+						saveSettings()
 					}
-					p.window.Resize(fyne.NewSize(p.setting.Width, p.setting.Height))
+					window.Resize(fyne.NewSize(setting.Width, setting.Height))
 				},
-				p.window,
+				window,
 			)
-			settingsDialog.Resize(fyne.NewSize(500, 500))
+			settingsDialog.Resize(fyne.NewSize(500, 400))
 			settingsDialog.Show()
 		}),
 	)
 
-	p.doBarAction = widget.NewToolbarAction(theme.MediaPlayIcon(), p.toggleTimer)
-	p.doBar = widget.NewToolbar(p.doBarAction)
-	p.resetBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaStopIcon(),
+	doBarAction = widget.NewToolbarAction(theme.MediaPlayIcon(), toggleTimer)
+	doBar = widget.NewToolbar(doBarAction)
+	resetBar = widget.NewToolbar(widget.NewToolbarAction(theme.MediaStopIcon(),
 		func() {
 			informDialog := dialog.NewCustomConfirm("确认重置", "确定", "手滑",
 				container.NewCenter(canvas.NewText("重置将会清除当前状态和进度，确认吗？", workColor)), func(confirmed bool) {
 					if confirmed {
-						p.resetTimer()
+						resetTimer()
 					}
-				}, p.window)
+				}, window)
 			informDialog.Resize(fyne.NewSize(300, 250))
 			informDialog.Show()
 		}))
 
-	p.stateText = canvas.NewText("准备开始", noteColor)
-	p.stateText.TextSize = 24
+	stateText = canvas.NewText("准备开始", noteColor)
+	stateText.TextSize = 24
 
-	p.statImage = canvas.NewImageFromResource(pauseImage)
-	p.statImage.FillMode = canvas.ImageFillContain
-	p.statImage.SetMinSize(fyne.NewSize(32, 32))
+	statImage = canvas.NewImageFromResource(pauseImage)
+	statImage.FillMode = canvas.ImageFillContain
+	statImage.SetMinSize(fyne.NewSize(32, 32))
 
 	stateContent := container.NewCenter(
 		container.NewHBox(
-			container.NewVBox(p.stateText),
-			p.statImage,
+			container.NewVBox(stateText),
+			statImage,
 		),
 	)
 
-	p.total = time.Duration(p.setting.WorkTime) * time.Minute
-	p.remaining = p.total
+	total = time.Duration(setting.WorkTime) * time.Minute
+	remaining = total
 
-	p.timeText = canvas.NewText(formatDuration(p.remaining), workColor)
-	p.timeText.TextSize = 120
+	timeText = canvas.NewText(formatDuration(remaining), workColor)
+	timeText.TextSize = 120
 
-	p.statCountText = canvas.NewText(p.getPomodoroCount(), statColor)
-	p.statCountText.TextSize = 20
+	statCountText = canvas.NewText(getPomodoroCount(), statColor)
+	statCountText.TextSize = 20
 
-	p.statTimeText = canvas.NewText(p.getPomodoroTime(), statColor)
-	p.statTimeText.TextSize = 20
+	statTimeText = canvas.NewText(getPomodoroTime(), statColor)
+	statTimeText.TextSize = 20
 
 	countIcon := widget.NewIcon(pomodoroImage)
 	timeIcon := widget.NewIcon(clockImage)
@@ -463,21 +458,21 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	countItem := container.NewHBox(
 		countIcon,
 		container.NewVBox(
-			p.statCountText,
+			statCountText,
 		),
 	)
 
 	timeItem := container.NewHBox(
 		timeIcon,
 		container.NewVBox(
-			p.statTimeText,
+			statTimeText,
 		),
 	)
 
 	statsContainer := container.NewVBox(countItem, timeItem)
 	statsContainer = container.NewPadded(statsContainer)
 
-	barContainer := container.NewVBox(toolbar, p.resetBar, p.doBar)
+	barContainer := container.NewVBox(toolbar, resetBar, doBar)
 	barContainer = container.NewPadded(barContainer)
 
 	finalLayout := container.New(newProportionalLayout(0.15, 0.7, 0.15, 110, 200, 112),
@@ -486,7 +481,7 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 			container.NewVBox(
 				container.NewCenter(stateContent),
 				NewNegativeSpacer(-25),
-				container.NewCenter(p.timeText),
+				container.NewCenter(timeText),
 			),
 		),
 		statsContainer,
@@ -495,141 +490,148 @@ func (p *MyApp) createUI() fyne.CanvasObject {
 	return finalLayout
 }
 
-func (p *MyApp) toggleTimer() {
-	if !p.isRunning {
-		p.startTimer()
+func toggleTimer() {
+	if !isRunning {
+		startTimer()
 	} else {
-		p.pauseTimer()
+		pauseTimer()
 	}
 }
 
-func (p *MyApp) startTimer() {
-	if p.currentState == stateIdle {
-		if p.nextState == stateWorking {
-			p.total = time.Duration(p.setting.WorkTime) * time.Minute
-			p.remaining = p.total
-			p.totalRunningTime = 0
-			p.startTime = time.Now()
+func startTimer() {
+	if currentState == stateIdle {
+		if nextState == stateWorking {
+			total = time.Duration(setting.WorkTime) * time.Minute
+			remaining = total
+			totalRunningTime = 0
+			startTime = time.Now()
 		}
-		if p.nextState == stateBreaking {
-			p.total = time.Duration(p.setting.WorkTime) * time.Minute
-			p.remaining = p.total
-			p.totalRunningTime = 0
-			p.startTime = time.Now()
+		if nextState == stateBreaking {
+			total = time.Duration(setting.WorkTime) * time.Minute
+			remaining = total
+			totalRunningTime = 0
+			startTime = time.Now()
 		}
 	}
-	p.lastStartTime = time.Now()
-	p.isRunning = true
-	p.transitionState(p.nextState)
-	p.doBarAction.SetIcon(theme.MediaPauseIcon())
+	lastStartTime = time.Now()
+	isRunning = true
+	transitionState(nextState)
+	doBarAction.SetIcon(theme.MediaPauseIcon())
 
-	if p.ticker != nil {
-		p.ticker.Stop()
+	if ticker == nil {
+		ticker = time.NewTicker(1 * time.Second)
+	} else {
+		ticker.Reset(1 * time.Second)
 	}
 
-	p.ticker = time.NewTicker(500 * time.Millisecond)
 	go func() {
-		for range p.ticker.C {
-			if !p.isRunning {
+		for range ticker.C {
+			if !isRunning {
 				return
 			}
 
-			currentRunTime := time.Since(p.lastStartTime)
-			p.lastStartTime = time.Now()
-			p.totalRunningTime = p.totalRunningTime + currentRunTime
-			p.remaining = p.total - p.totalRunningTime
+			currentRunTime := time.Since(lastStartTime)
+			lastStartTime = time.Now()
+			totalRunningTime = totalRunningTime + currentRunTime
+			remaining = total - totalRunningTime
 
-			if p.remaining <= 0 {
-				p.ticker.Stop()
-				p.timerComplete()
+			if remaining <= 0 {
+				ticker.Stop()
+				timerComplete()
 				return
 			}
 
+			newText := formatDuration(remaining)
 			fyne.Do(func() {
-				p.timeText.Text = formatDuration(p.remaining)
-				p.timeText.Refresh()
+				updateTimeText(newText)
 			})
 		}
 	}()
 }
 
-func (p *MyApp) pauseTimer() {
-	p.isRunning = false
-	p.transitionState(statePause)
-	p.doBarAction.SetIcon(theme.MediaPlayIcon())
+func updateTimeText(text string) {
+	timeText.Text = text
+	timeText.Refresh()
+	runtime.GC()
+}
 
-	if p.ticker != nil {
-		p.ticker.Stop()
+func pauseTimer() {
+	isRunning = false
+	transitionState(statePause)
+	doBarAction.SetIcon(theme.MediaPlayIcon())
+
+	if ticker != nil {
+		ticker.Stop()
 	}
 }
 
-func (p *MyApp) resetTimer() {
-	p.pauseTimer()
-	p.transitionState(stateIdle)
-	p.nextState = stateWorking
-	p.total = time.Duration(p.setting.WorkTime) * time.Minute
-	p.remaining = p.total
-	p.timeText.Text = formatDuration(p.remaining)
-	p.timeText.Color = workColor
-	p.doBarAction.SetIcon(theme.MediaPlayIcon())
+func resetTimer() {
+	pauseTimer()
+	transitionState(stateIdle)
+	nextState = stateWorking
+	total = time.Duration(setting.WorkTime) * time.Minute
+	remaining = total
+	timeText.Text = formatDuration(remaining)
+	timeText.Color = workColor
+	doBarAction.SetIcon(theme.MediaPlayIcon())
 }
 
-func (p *MyApp) timerComplete() {
-	p.isRunning = false
-	p.showNotification()
+func timerComplete() {
+	isRunning = false
+	showNotification()
 }
 
-func (p *MyApp) transitionState(newState state) {
-	p.checkAndRefreshToday()
-	p.currentState = newState
+func transitionState(newState state) {
+	checkAndRefreshToday()
+	currentState = newState
 	switch newState {
 	case stateWorking:
-		p.total = time.Duration(p.setting.WorkTime) * time.Minute
-		p.stateText.Text = "专注中..."
-		p.statImage.Resource = workingImage
-		p.stateText.Color = noteColor
-		p.timeText.Color = workColor
+		total = time.Duration(setting.WorkTime) * time.Minute
+		stateText.Text = "专注中..."
+		statImage.Resource = workingImage
+		stateText.Color = noteColor
+		timeText.Color = workColor
 	case stateBreaking:
-		p.total = time.Duration(p.setting.BreakTime) * time.Minute
-		p.stateText.Text = "休息中..."
-		p.statImage.Resource = breakingImage
-		p.stateText.Color = noteColor
-		p.timeText.Color = breakColor
+		total = time.Duration(setting.BreakTime) * time.Minute
+		stateText.Text = "休息中..."
+		statImage.Resource = breakingImage
+		stateText.Color = noteColor
+		timeText.Color = breakColor
 	case stateIdle:
-		p.stateText.Text = "准备开始"
-		p.statImage.Resource = pauseImage
-		p.stateText.Color = noteColor
+		stateText.Text = "准备开始"
+		statImage.Resource = pauseImage
+		stateText.Color = noteColor
 	case statePause:
-		p.stateText.Text = "暂个停..."
-		p.statImage.Resource = pauseImage
-		p.stateText.Color = noteColor
+		stateText.Text = "暂个停..."
+		statImage.Resource = pauseImage
+		stateText.Color = noteColor
 	}
 
-	p.statImage.Refresh()
-	p.stateText.Refresh()
+	statImage.Refresh()
+	stateText.Refresh()
 }
 
-func (p *MyApp) showNotification() {
+func showNotification() {
 	var title, message string
 	var soundFile string
-	if p.currentState == stateWorking {
+	if currentState == stateWorking {
 		title = "工作完成了！"
 		message = "辛苦了，休息一会吧！"
-		p.nextState = stateBreaking
-		soundFile = p.setting.BreakInformPath
-		p.updatePomodoro()
-		p.saveTaskRecord()
-		p.checkAndRefreshToday()
+		nextState = stateBreaking
+		soundFile = setting.WorkInformPath
+		updatePomodoro()
+		saveTaskRecord()
+		checkAndRefreshToday()
 	} else {
 		title = "继续工作了！"
 		message = "休息结束，要工作了，加油！"
-		p.nextState = stateWorking
-		soundFile = p.setting.WorkInformPath
+		nextState = stateWorking
+		soundFile = setting.WorkInformPath
 	}
 
-	go p.playSound(soundFile)
+	go playSound(soundFile)
 
-	p.currentState = stateIdle
+	currentState = stateIdle
 	informDialog := dialog.NewCustomConfirm(
 		title,
 		"好的",
@@ -637,62 +639,62 @@ func (p *MyApp) showNotification() {
 		container.NewCenter(canvas.NewText(message, theme.TextColor())),
 		func(confirmed bool) {
 			if confirmed {
-				p.startTimer()
+				startTimer()
 			} else {
-				p.resetTimer()
+				resetTimer()
 			}
 		},
-		p.window,
+		window,
 	)
 
 	informDialog.Resize(fyne.NewSize(200, 150))
 	informDialog.Show()
 
 	fyne.Do(func() {
-		p.ensureFocus()
+		ensureFocus()
 	})
 }
 
-func (p *MyApp) updatePomodoro() {
-	p.pomodoroTime += int(math.Ceil(p.total.Minutes()))
-	p.pomodoroCount++
+func updatePomodoro() {
+	pomodoroTime += int(math.Ceil(total.Minutes()))
+	pomodoroCount++
 
 	fyne.Do(func() {
-		p.statTimeText.Text = p.getPomodoroTime()
-		p.statCountText.Text = p.getPomodoroCount()
+		statTimeText.Text = getPomodoroTime()
+		statCountText.Text = getPomodoroCount()
 
-		p.statTimeText.Refresh()
-		p.statCountText.Refresh()
+		statTimeText.Refresh()
+		statCountText.Refresh()
 	})
 }
 
-func (p *MyApp) checkAndRefreshToday() {
+func checkAndRefreshToday() {
 	currentDay := time.Now().Format("2006-01-02")
-	if p.today != currentDay {
-		p.today = currentDay
-		p.pomodoroCount, _ = p.countRecordByDate(p.today)
-		p.pomodoroTime, _ = p.countRecordByDate(p.today)
+	if today != currentDay {
+		today = currentDay
+		pomodoroCount, _ = countRecordByDate(today)
+		pomodoroTime, _ = countRecordByDate(today)
 		fyne.Do(func() {
-			p.statTimeText.Text = p.getPomodoroTime()
-			p.statCountText.Text = p.getPomodoroCount()
+			statTimeText.Text = getPomodoroTime()
+			statCountText.Text = getPomodoroCount()
 
-			p.statTimeText.Refresh()
-			p.statCountText.Refresh()
+			statTimeText.Refresh()
+			statCountText.Refresh()
 		})
-		p.logInfo("day refresh. today=", p.today)
+		logInfo("day refresh. today=", today)
 	}
 }
 
-func (p *MyApp) saveTaskRecord() {
+func saveTaskRecord() {
 	record := taskRecord{
-		Date:      p.startTime.Format("2006-01-02"),
-		StartTime: p.startTime,
+		Date:      startTime.Format("2006-01-02"),
+		StartTime: startTime,
 		EndTime:   time.Now(),
-		Duration:  int(math.Ceil(p.total.Minutes())),
+		Duration:  int(math.Ceil(total.Minutes())),
 		Type:      "pomodoro",
 	}
-	if err := p.addTimeRecord(record); err != nil {
-		p.logInfo("insert task record error.", record, err)
+	if err := addTimeRecord(record); err != nil {
+		logInfo("insert task record error.", record, err)
 	}
 }
 
@@ -704,178 +706,149 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", m, s)
 }
 
-func (p *MyApp) getPomodoroCount() string {
-	return fmt.Sprintf(": %d个", p.pomodoroCount)
+func getPomodoroCount() string {
+	return fmt.Sprintf(": %d个", pomodoroCount)
 }
 
-func (p *MyApp) getPomodoroTime() string {
-	return fmt.Sprintf(": %d分", p.pomodoroTime)
+func getPomodoroTime() string {
+	return fmt.Sprintf(": %d分", pomodoroTime)
 }
 
-func (p *MyApp) loadSettings() {
+func loadSettings() {
 
-	p.setting = &settings{
-		WorkTime:        45,
-		BreakTime:       15,
-		WorkInformPath:  defaultEmpty,
-		BgImgPath:       defaultImagPath,
-		BreakInformPath: defaultEmpty,
-		WorkColorText:   colorToHex(workColor),
-		BreakColorText:  colorToHex(breakColor),
-		NoteColorText:   colorToHex(noteColor),
-		StatColorText:   colorToHex(statColor),
-		Width:           430,
-		Height:          238,
+	setting = &settings{
+		WorkTime:       45,
+		BreakTime:      15,
+		WorkInformPath: defaultEmpty,
+		WorkColorText:  colorToHex(workColor),
+		BreakColorText: colorToHex(breakColor),
+		NoteColorText:  colorToHex(noteColor),
+		StatColorText:  colorToHex(statColor),
+		Width:          430,
+		Height:         238,
 	}
 
 	if _, err := os.Stat("settings.json"); os.IsNotExist(err) {
-		p.logError("配置文件打开失败:", err)
+		logError("配置文件打开失败:", err)
 		return
 	}
 
 	data, err := os.ReadFile("settings.json")
 	if err != nil {
-		p.logError("读取设置失败:", err)
+		logError("读取设置失败:", err)
 		return
 	}
 
-	if err := json.Unmarshal(data, &p.setting); err != nil {
-		p.logError("解析设置失败:", err)
+	if err := json.Unmarshal(data, &setting); err != nil {
+		logError("解析设置失败:", err)
 	}
 
-	if p.setting.WorkTime == 0 {
-		p.setting.WorkTime = 45
+	if setting.WorkTime == 0 {
+		setting.WorkTime = 45
 	}
-	if p.setting.BreakTime == 0 {
-		p.setting.BreakTime = 15
+	if setting.BreakTime == 0 {
+		setting.BreakTime = 15
 	}
-	if p.setting.StatColorText == "" {
-		p.setting.StatColorText = colorToHex(statColor)
+	if setting.StatColorText == "" {
+		setting.StatColorText = colorToHex(statColor)
 	}
-	if p.setting.WorkColorText == "" {
-		p.setting.WorkColorText = colorToHex(workColor)
+	if setting.WorkColorText == "" {
+		setting.WorkColorText = colorToHex(workColor)
 	}
-	if p.setting.NoteColorText == "" {
-		p.setting.NoteColorText = colorToHex(noteColor)
+	if setting.NoteColorText == "" {
+		setting.NoteColorText = colorToHex(noteColor)
 	}
-	if p.setting.BgImgPath == "" {
-		p.setting.BgImgPath = defaultImagPath
-	}
+
 }
 
-func (p *MyApp) saveSettings() {
-	jsonData, err := json.MarshalIndent(p.setting, "", "  ")
+func saveSettings() {
+	jsonData, err := json.MarshalIndent(setting, "", "  ")
 	if err != nil {
-		p.logError("编码设置失败:", err)
+		logError("编码设置失败:", err)
 		return
 	}
 
 	if err := os.WriteFile("settings.json", jsonData, 0644); err != nil {
-		p.logError("保存设置失败:", err)
+		logError("保存设置失败:", err)
 	}
 }
 
-func (p *MyApp) createSettingsContent() fyne.CanvasObject {
+func createSettingsContent() fyne.CanvasObject {
 	var formItems []*widget.FormItem
 
 	workEntry := newFixedWidthEntry(100, 36)
-	workEntry.Objects[0].(*widget.Entry).SetText(strconv.Itoa(p.setting.WorkTime))
+	workEntry.Objects[0].(*widget.Entry).SetText(strconv.Itoa(setting.WorkTime))
 	workEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
 		if val, err := strconv.Atoi(text); err == nil {
-			p.setting.WorkTime = val
+			setting.WorkTime = val
 		}
 	}
 	workContainer := container.NewHBox(workEntry, widget.NewLabel("分钟"))
 	formItems = append(formItems, widget.NewFormItem("番茄时钟:", workContainer))
 
 	breakEntry := newFixedWidthEntry(100, 36)
-	breakEntry.Objects[0].(*widget.Entry).SetText(strconv.Itoa(p.setting.BreakTime))
+	breakEntry.Objects[0].(*widget.Entry).SetText(strconv.Itoa(setting.BreakTime))
 	breakEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
 		if val, err := strconv.Atoi(text); err == nil {
-			p.setting.BreakTime = val
+			setting.BreakTime = val
 		}
 	}
 	breakContainer := container.NewHBox(breakEntry, widget.NewLabel("分钟"))
 	formItems = append(formItems, widget.NewFormItem("休息时钟:", breakContainer))
 
 	workColorEntry := newFixedWidthEntry(100, 36)
-	workColorEntry.Objects[0].(*widget.Entry).SetText(p.setting.WorkColorText)
+	workColorEntry.Objects[0].(*widget.Entry).SetText(setting.WorkColorText)
 	workColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
 		workColor, _ = hexToColor(text)
-		p.setting.WorkColorText = text
-		if p.currentState == stateWorking {
-			p.timeText.Color = workColor
+		setting.WorkColorText = text
+		if currentState == stateWorking {
+			timeText.Color = workColor
 		}
 	}
 	formItems = append(formItems, widget.NewFormItem("番茄钟色:", workColorEntry))
 
 	breakColorEntry := newFixedWidthEntry(100, 36)
-	breakColorEntry.Objects[0].(*widget.Entry).SetText(p.setting.BreakColorText)
+	breakColorEntry.Objects[0].(*widget.Entry).SetText(setting.BreakColorText)
 	breakColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
 		breakColor, _ = hexToColor(text)
-		p.setting.BreakColorText = text
-		if p.currentState != stateWorking {
-			p.timeText.Color = breakColor
+		setting.BreakColorText = text
+		if currentState != stateWorking {
+			timeText.Color = breakColor
 		}
 	}
 	formItems = append(formItems, widget.NewFormItem("休息钟色:", breakColorEntry))
 
 	NoteColorEntry := newFixedWidthEntry(100, 36)
-	NoteColorEntry.Objects[0].(*widget.Entry).SetText(p.setting.NoteColorText)
+	NoteColorEntry.Objects[0].(*widget.Entry).SetText(setting.NoteColorText)
 	NoteColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
-		p.setting.NoteColorText = text
+		setting.NoteColorText = text
 		noteColor, _ = hexToColor(text)
-		p.stateText.Color = noteColor
+		stateText.Color = noteColor
 	}
 	formItems = append(formItems, widget.NewFormItem("状态字色:", NoteColorEntry))
 
 	statColorEntry := newFixedWidthEntry(100, 36)
-	statColorEntry.Objects[0].(*widget.Entry).SetText(p.setting.StatColorText)
+	statColorEntry.Objects[0].(*widget.Entry).SetText(setting.StatColorText)
 	statColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
-		p.setting.StatColorText = text
+		setting.StatColorText = text
 		statColor, _ = hexToColor(text)
-		p.statTimeText.Color = statColor
-		p.statCountText.Color = statColor
+		statTimeText.Color = statColor
+		statCountText.Color = statColor
 	}
 	formItems = append(formItems, widget.NewFormItem("统计字色:", statColorEntry))
 
-	p.setting.bgPathText = widget.NewLabel(defaultImagPath)
-	if p.setting.BgImgPath != "" {
-		p.setting.bgPathText.SetText(truncatePath(p.setting.BgImgPath, 50))
-	}
-	selectBgImgBtn := widget.NewButton("更改", p.selectBgImgFile)
-	BgImgContainer := container.NewHBox(
-		p.setting.bgPathText,
-		layout.NewSpacer(),
-		selectBgImgBtn,
-	)
-	formItems = append(formItems, widget.NewFormItem("背景图片:", BgImgContainer))
-
 	// 上课铃设置
-	p.setting.workPathText = widget.NewLabel("未设置")
-	if p.setting.WorkInformPath != "" {
-		p.setting.workPathText.SetText(truncatePath(p.setting.WorkInformPath, 50))
+	setting.workPathText = widget.NewLabel("未设置")
+	if setting.WorkInformPath != "" {
+		setting.workPathText.SetText(truncatePath(setting.WorkInformPath, 50))
 	}
-	selectWorkInformBtn := widget.NewButton("更改", p.selectWorkFile)
+	selectWorkInformBtn := widget.NewButton("更改", selectWorkFile)
 	workSoundContainer := container.NewHBox(
-		p.setting.workPathText,
+		setting.workPathText,
 		layout.NewSpacer(),
 		selectWorkInformBtn,
 	)
-	formItems = append(formItems, widget.NewFormItem("上课铃声:", workSoundContainer))
-
-	// 下课铃设置
-	p.setting.breakPathText = widget.NewLabel("未设置")
-	if p.setting.BreakInformPath != "" {
-		p.setting.breakPathText.SetText(truncatePath(p.setting.BreakInformPath, 50))
-	}
-	selectBreakInformBtn := widget.NewButton("更改", p.selectBreakFile)
-	breakSoundContainer := container.NewHBox(
-		p.setting.breakPathText,
-		layout.NewSpacer(),
-		selectBreakInformBtn,
-	)
-	formItems = append(formItems, widget.NewFormItem("下课铃声:", breakSoundContainer))
+	formItems = append(formItems, widget.NewFormItem("通知铃声:", workSoundContainer))
 
 	// 创建表单
 	form := widget.NewForm(formItems...)
@@ -884,78 +857,73 @@ func (p *MyApp) createSettingsContent() fyne.CanvasObject {
 	return container.NewVBox(form)
 }
 
-func (p *MyApp) createSettingsContent2() fyne.CanvasObject {
-	workEntry := widget.NewEntry()
-	workEntry.SetText(strconv.Itoa(p.setting.WorkTime))
-	workEntry.OnChanged = func(text string) {
-		if val, err := strconv.Atoi(text); err == nil {
-			p.setting.WorkTime = val
-		}
-	}
+//func createSettingsContent2() fyne.CanvasObject {
+//	workEntry := widget.NewEntry()
+//	workEntry.SetText(strconv.Itoa(setting.WorkTime))
+//	workEntry.OnChanged = func(text string) {
+//		if val, err := strconv.Atoi(text); err == nil {
+//			setting.WorkTime = val
+//		}
+//	}
+//
+//	breakEntry := widget.NewEntry()
+//	breakEntry.SetText(strconv.Itoa(setting.BreakTime))
+//	breakEntry.OnChanged = func(text string) {
+//		if val, err := strconv.Atoi(text); err == nil {
+//			setting.BreakTime = val
+//		}
+//	}
+//
+//
+//	setting.workPathText = widget.NewLabel("未设置")
+//	if setting.WorkInformPath != "" {
+//		setting.workPathText.SetText(truncatePath(setting.WorkInformPath, 30))
+//	}
+//	selectWorkInformBtn := widget.NewButton("更改", selectWorkFile)
+//
+//	setting.breakPathText = widget.NewLabel("未设置")
+//	if setting.BreakInformPath != "" {
+//		setting.breakPathText.SetText(truncatePath(setting.BreakInformPath, 30))
+//	}
+//	selectBreakInformBtn := widget.NewButton("更改", selectBreakFile)
+//
+//	return container.NewVBox(
+//		container.NewHBox(widget.NewLabel("番茄钟:"), workEntry, widget.NewLabel("分钟")),
+//		layout.NewSpacer(),
+//		container.NewHBox(widget.NewLabel("休息钟:"), breakEntry, widget.NewLabel("分钟")),
+//		layout.NewSpacer(),
+//		container.NewHBox(widget.NewLabel("背景图:"), setting.bgPathText, selectBgImgBtn),
+//		layout.NewSpacer(),
+//		container.NewHBox(widget.NewLabel("上课铃:"), setting.workPathText, selectWorkInformBtn),
+//		layout.NewSpacer(),
+//		container.NewHBox(widget.NewLabel("下课铃:"), setting.breakPathText, selectBreakInformBtn),
+//	)
+//}
 
-	breakEntry := widget.NewEntry()
-	breakEntry.SetText(strconv.Itoa(p.setting.BreakTime))
-	breakEntry.OnChanged = func(text string) {
-		if val, err := strconv.Atoi(text); err == nil {
-			p.setting.BreakTime = val
-		}
-	}
-
-	p.setting.bgPathText = widget.NewLabel("未设置")
-	if p.setting.BgImgPath != "" {
-		p.setting.bgPathText.SetText(truncatePath(p.setting.BgImgPath, 30))
-	}
-	selectBgImgBtn := widget.NewButton("更改", p.selectBgImgFile)
-
-	p.setting.workPathText = widget.NewLabel("未设置")
-	if p.setting.WorkInformPath != "" {
-		p.setting.workPathText.SetText(truncatePath(p.setting.WorkInformPath, 30))
-	}
-	selectWorkInformBtn := widget.NewButton("更改", p.selectWorkFile)
-
-	p.setting.breakPathText = widget.NewLabel("未设置")
-	if p.setting.BreakInformPath != "" {
-		p.setting.breakPathText.SetText(truncatePath(p.setting.BreakInformPath, 30))
-	}
-	selectBreakInformBtn := widget.NewButton("更改", p.selectBreakFile)
-
-	return container.NewVBox(
-		container.NewHBox(widget.NewLabel("番茄钟:"), workEntry, widget.NewLabel("分钟")),
-		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("休息钟:"), breakEntry, widget.NewLabel("分钟")),
-		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("背景图:"), p.setting.bgPathText, selectBgImgBtn),
-		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("上课铃:"), p.setting.workPathText, selectWorkInformBtn),
-		layout.NewSpacer(),
-		container.NewHBox(widget.NewLabel("下课铃:"), p.setting.breakPathText, selectBreakInformBtn),
-	)
-}
-
-func (p *MyApp) selectWorkFile() {
-	p.selectFile(func(filePath string) {
-		p.setting.WorkInformPath = filePath
-		p.setting.workPathText.SetText(truncatePath(filePath, 30))
+func selectWorkFile() {
+	selectFile(func(filePath string) {
+		setting.WorkInformPath = filePath
+		setting.workPathText.SetText(truncatePath(filePath, 30))
 	}, "mp3")
 }
 
-func (p *MyApp) selectBgImgFile() {
-	p.selectFile(func(filePath string) {
-		p.setting.BgImgPath = filePath
-		p.setting.bgPathText.SetText(truncatePath(filePath, 30))
-		p.content.Objects[0] = canvas.NewImageFromFile(p.setting.BgImgPath)
-		p.content.Refresh()
-	}, "img")
-}
+//func selectBgImgFile() {
+//	selectFile(func(filePath string) {
+//		setting.BgImgPath = filePath
+//		setting.bgPathText.SetText(truncatePath(filePath, 30))
+//		content.Objects[0] = canvas.NewImageFromFile(setting.BgImgPath)
+//		content.Refresh()
+//	}, "img")
+//}
 
-func (p *MyApp) selectBreakFile() {
-	p.selectFile(func(filePath string) {
-		p.setting.BreakInformPath = filePath
-		p.setting.breakPathText.SetText(truncatePath(filePath, 30))
-	}, "mp3")
-}
+//func selectBreakFile() {
+//	selectFile(func(filePath string) {
+//		setting.BreakInformPath = filePath
+//		setting.breakPathText.SetText(truncatePath(filePath, 30))
+//	}, "mp3")
+//}
 
-func (p *MyApp) selectFile(callback func(string), fType string) {
+func selectFile(callback func(string), fType string) {
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 		if err != nil || reader == nil {
 			return
@@ -963,24 +931,24 @@ func (p *MyApp) selectFile(callback func(string), fType string) {
 		defer func(reader fyne.URIReadCloser) {
 			err := reader.Close()
 			if err != nil {
-				p.logError("close select sound file error", err)
+				logError("close select sound file error", err)
 			}
 		}(reader)
 
 		filePath := reader.URI().Path()
 		if fType == "img" {
 			if !isImgFile(filePath) {
-				dialog.ShowInformation("提示", "请选择正确的图片文件)", p.window)
+				dialog.ShowInformation("提示", "请选择正确的图片文件)", window)
 				return
 			}
 		} else {
 			if !isAudioFile(filePath) {
-				dialog.ShowInformation("提示", "请选择MP3音频文件)", p.window)
+				dialog.ShowInformation("提示", "请选择MP3音频文件)", window)
 				return
 			}
 		}
 		callback(filePath)
-	}, p.window)
+	}, window)
 }
 
 func truncatePath(path string, maxLen int) string {
@@ -1050,31 +1018,31 @@ func newLogger(config *loggerConfig) *Logger {
 	}
 }
 
-func (p *MyApp) logError(message string, err error) {
-	p.logger.Printf("[ERROR] %s: %v", message, err)
+func logError(message string, err error) {
+	logger.Printf("[ERROR] %s: %v", message, err)
 }
 
-func (p *MyApp) logInfo(message string, args ...interface{}) {
-	p.logger.Printf("[INFO] "+message, args...)
+func logInfo(message string, args ...interface{}) {
+	logger.Printf("[INFO] "+message, args...)
 }
 
-func (p *MyApp) initDatabase() error {
+func initDatabase() error {
 	var err error
-	p.db, err = sql.Open("sqlite3", "./pomodoro.db")
+	db, err = sql.Open("sqlite3", "./pomodoro.db")
 	if err != nil {
-		p.logError("open db error", err)
+		logError("open db error", err)
 		return fmt.Errorf("打开数据库失败: %w", err)
 	}
 
-	if _, err := p.db.Exec(CREATE_SQL); err != nil {
-		p.logError("create db table error", err)
+	if _, err := db.Exec(CREATE_SQL); err != nil {
+		logError("create db table error", err)
 		return fmt.Errorf("创建表失败: %w", err)
 	}
 	return nil
 }
 
-func (p *MyApp) addTimeRecord(record taskRecord) error {
-	_, err := p.db.Exec(
+func addTimeRecord(record taskRecord) error {
+	_, err := db.Exec(
 		INSERT_SQL,
 		record.Date,
 		record.StartTime.Format(time.DateTime),
@@ -1085,71 +1053,71 @@ func (p *MyApp) addTimeRecord(record taskRecord) error {
 	return err
 }
 
-func (p *MyApp) countRecordByDate(date string) (int, error) {
+func countRecordByDate(date string) (int, error) {
 	var total int
-	err := p.db.QueryRow(COUNT_SQL, date).Scan(&total)
+	err := db.QueryRow(COUNT_SQL, date).Scan(&total)
 	return total, err
 }
 
-func (p *MyApp) getTotalWorkTimeByDate(date string) (int, error) {
+func getTotalWorkTimeByDate(date string) (int, error) {
 	var total int
-	err := p.db.QueryRow(DURATION_SQL, date).Scan(&total)
+	err := db.QueryRow(DURATION_SQL, date).Scan(&total)
 	return total, err
 }
 
-func (p *MyApp) ensureFocus() {
+func ensureFocus() {
 	// 延迟请求焦点
 	go func() {
 		// 第一次延迟
 		time.Sleep(200 * time.Millisecond)
-		p.window.RequestFocus()
+		window.RequestFocus()
 
 		// 第二次延迟（增加成功率）
 		time.Sleep(500 * time.Millisecond)
-		p.window.RequestFocus()
+		window.RequestFocus()
 
 		// 第三次延迟（针对特别顽固的情况）
 		time.Sleep(1000 * time.Millisecond)
-		p.window.RequestFocus()
+		window.RequestFocus()
 	}()
 }
 
-func (p *MyApp) playSound(filePath string) {
+func playSound(filePath string) {
 	if filePath == "" {
 		return
 	}
-	p.playSoundWithBeep(filePath)
+	playSoundWithBeep(filePath)
 }
 
-func (p *MyApp) playSoundWithBeep(filePath string) {
+func playSoundWithBeep(filePath string) {
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		p.logError("open mp3 file error", err)
+		logError("open mp3 file error", err)
 		return
 	}
 	defer func(f *os.File) {
 		err := f.Close()
 		if err != nil {
-			p.logError("close mp3 file error", err)
+			logError("close mp3 file error", err)
 		}
 	}(f)
 
 	streamer, format, err := mp3.Decode(f)
 	if err != nil {
-		p.logError("decode mp3 file error", err)
+		logError("decode mp3 file error", err)
 		return
 	}
 	defer func(streamer beep.StreamSeekCloser) {
 		err := streamer.Close()
 		if err != nil {
-			p.logError("close mp3 stream file error", err)
+			logError("close mp3 stream file error", err)
 		}
 	}(streamer)
 
 	err = speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/5))
 	if err != nil {
-		p.logError("init speaker error", err)
+		logError("init speaker error", err)
 		return
 	}
 
