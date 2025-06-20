@@ -243,6 +243,7 @@ func main() {
 		closeDialog.Show()
 	})
 
+	resetTimer()
 	window.SetIcon(logoImage)
 	window.Resize(fyne.NewSize(setting.Width, setting.Height))
 	window.SetPadded(false)
@@ -1090,42 +1091,42 @@ func playSound(filePath string) {
 }
 
 func playSoundWithBeep(filePath string) {
-
+	// 打开文件
 	f, err := os.Open(filePath)
 	if err != nil {
 		logError("open mp3 file error", err)
 		return
 	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			logError("close mp3 file error", err)
-		}
-	}(f)
 
+	// 解码MP3文件
 	streamer, format, err := mp3.Decode(f)
 	if err != nil {
+		f.Close() // 解码失败时关闭文件
 		logError("decode mp3 file error", err)
 		return
 	}
-	defer func(streamer beep.StreamSeekCloser) {
-		err := streamer.Close()
-		if err != nil {
-			logError("close mp3 stream file error", err)
-		}
-	}(streamer)
 
+	// 初始化扬声器
 	err = speaker.Init(format.SampleRate, format.SampleRate.N(time.Second/5))
 	if err != nil {
+		streamer.Close() // 初始化失败时关闭流
+		f.Close()        // 初始化失败时关闭文件
 		logError("init speaker error", err)
 		return
 	}
 
+	// 创建完成通道
 	done := make(chan bool)
+
+	// 播放音频并在完成后关闭资源
 	speaker.Play(beep.Seq(streamer, beep.Callback(func() {
+		// 音频播放完成后关闭流和文件
+		streamer.Close()
+		f.Close()
 		done <- true
 	})))
 
+	// 等待播放完成
 	<-done
 }
 
