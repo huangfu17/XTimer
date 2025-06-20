@@ -66,34 +66,35 @@ func initResources() {
 }
 
 var (
-	myApp            fyne.App
-	window           fyne.Window
-	settingsWindow   fyne.Window
-	ticker           *time.Ticker
-	remaining        time.Duration
-	total            time.Duration
-	totalRunningTime time.Duration
-	startTime        time.Time
-	lastStartTime    time.Time
-	isRunning        bool
-	timeText         *canvas.Text
-	stateText        *canvas.Text
-	statImage        *canvas.Image
-	statTimeText     *canvas.Text
-	statCountText    *canvas.Text
-	content          *fyne.Container
-	overlay          *canvas.Rectangle
-	doBar            *widget.Toolbar
-	doBarAction      *widget.ToolbarAction
-	resetBar         *widget.Toolbar
-	setting          *settings
-	currentState     state
-	nextState        state
-	logger           *Logger
-	pomodoroCount    int
-	pomodoroTime     int
-	today            string
-	db               *sql.DB
+	myApp                 fyne.App
+	window                fyne.Window
+	settingsWindow        fyne.Window
+	ticker                *time.Ticker
+	remaining             time.Duration
+	total                 time.Duration
+	totalRunningTime      time.Duration
+	startTime             time.Time
+	lastStartTime         time.Time
+	isRunning             bool
+	timeText              *canvas.Text
+	stateText             *canvas.Text
+	statImage             *canvas.Image
+	statTimeText          *canvas.Text
+	statCountText         *canvas.Text
+	content               *fyne.Container
+	overlay               *canvas.Rectangle
+	doBar                 *widget.Toolbar
+	doBarAction           *widget.ToolbarAction
+	resetBar              *widget.Toolbar
+	setting               *settings
+	currentState          state
+	nextState             state
+	logger                *Logger
+	pomodoroCount         int
+	pomodoroTime          int
+	today                 string
+	db                    *sql.DB
+	closingSettingsWindow bool
 )
 
 const (
@@ -240,7 +241,10 @@ func main() {
 			container.NewCenter(canvas.NewText("确定要关闭应用吗？", theme.TextColor())), func(confirmed bool) {
 				if confirmed {
 					window.Close()
-					settingsWindow.Close()
+					if settingsWindow != nil {
+						settingsWindow.Close()
+						settingsWindow = nil
+					}
 				}
 			}, window)
 		closeDialog.Resize(fyne.NewSize(200, 150))
@@ -265,12 +269,17 @@ func loadResource(path string) (fyne.Resource, error) {
 }
 
 func showSettingsWindow() {
-
+	if settingsWindow != nil {
+		settingsWindow.Close()
+	}
 	settingsWindow = myApp.NewWindow("设置")
 	settingsWindow.SetCloseIntercept(func() {
 		saveSettings()
+		if settingsWindow != nil {
+			settingsWindow.Close()
+			settingsWindow = nil
+		}
 		updateTimeColor()
-		settingsWindow.Close()
 	})
 
 	settingsWindow.Resize(fyne.NewSize(500, 400))
@@ -654,15 +663,17 @@ func loadSettings() {
 }
 
 func saveSettings() {
-	jsonData, err := json.MarshalIndent(setting, "", "  ")
-	if err != nil {
-		logError("编码设置失败:", err)
-		return
-	}
+	go func() {
+		jsonData, err := json.MarshalIndent(setting, "", "  ")
+		if err != nil {
+			logError("编码设置失败:", err)
+			return
+		}
 
-	if err := os.WriteFile("settings.json", jsonData, 0644); err != nil {
-		logError("保存设置失败:", err)
-	}
+		if err := os.WriteFile("settings.json", jsonData, 0644); err != nil {
+			logError("保存设置失败:", err)
+		}
+	}()
 }
 
 func updateTimeColor() {
@@ -855,8 +866,11 @@ func createSettingsContent() fyne.CanvasObject {
 	// 创建按钮区域
 	saveButton := widget.NewButton("关闭", func() {
 		saveSettings()
+		if settingsWindow != nil {
+			settingsWindow.Close()
+			settingsWindow = nil
+		}
 		updateTimeColor()
-		settingsWindow.Close()
 	})
 
 	buttonArea := container.NewHBox(
