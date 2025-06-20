@@ -1,11 +1,12 @@
 {
   "workTime": 1,
-  "breakTime": 2,
-  "workInformPath": "/Users/huangfu/Music/理智/李志 - 下雨.mp3",
-  "height": 260,
+  "breakTime": 1,
+  "workInformPath": "/Users/huangfu/code/go/src/leo/kTimer/start.mp3",
+  "height": 214,
   "width": 430,
   "workColorText": "#DF5D1F",
   "breakColorText": "#7EA56A",
   "noteColorText": "#7EA56A",
+  "BgColorText": "#FFFFFF",
   "statColorText": "#7EA56A"
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/faiface/beep/speaker"
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/natefinch/lumberjack.v2"
-	"image"
 	"image/color"
 	"io"
 	"log"
@@ -82,8 +81,8 @@ var (
 	statImage        *canvas.Image
 	statTimeText     *canvas.Text
 	statCountText    *canvas.Text
-	bgImage          *canvas.Image
 	content          *fyne.Container
+	overlay          *canvas.Rectangle
 	doBar            *widget.Toolbar
 	doBarAction      *widget.ToolbarAction
 	resetBar         *widget.Toolbar
@@ -96,9 +95,6 @@ var (
 	today            string
 	db               *sql.DB
 )
-
-type MyApp struct {
-}
 
 const (
 	CREATE_SQL = `
@@ -150,19 +146,30 @@ type settings struct {
 	WorkColorText  string  `json:"workColorText"`
 	BreakColorText string  `json:"breakColorText"`
 	NoteColorText  string  `json:"noteColorText"`
+	BgColorText    string  `json:"BgColorText"`
 	StatColorText  string  `json:"statColorText"`
 	workPathText   *widget.Label
 	//breakPathText   *widget.Label
 	bgPathText *widget.Label
 }
 
-var noteColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
-var statColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
-var breakColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
-var workColor color.Color = color.RGBA{R: 223, G: 93, B: 31, A: 255}
+var defaultBgColor color.Color = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+var defaultNoteColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var defaultStatColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var defaultBreakColor color.Color = color.RGBA{R: 126, G: 165, B: 106, A: 255}
+var defaultWorkColor color.Color = color.RGBA{R: 223, G: 93, B: 31, A: 255}
+
+var bgColor color.Color = defaultBgColor
+var noteColor color.Color = defaultNoteColor
+var statColor color.Color = defaultStatColor
+var breakColor color.Color = defaultBreakColor
+var workColor color.Color = defaultWorkColor
 
 func main() {
-	myApp := app.NewWithID("XTimer")
+
+	logger = newDefaultLogger()
+
+	myApp = app.NewWithID("XTimer")
 
 	window = myApp.NewWindow("XTimer")
 
@@ -219,12 +226,8 @@ func main() {
 	pomodoroCount, _ = countRecordByDate(today)
 	pomodoroTime, _ = getTotalWorkTimeByDate(today)
 
-	//pomodoro.bgImage = canvas.NewImageFromFile(pomodoro.setting.BgImgPath)
-	//pomodoro.bgImage = createTransparentImage(pomodoro.setting.BgImgPath, 0)
-	//overlay := canvas.NewRectangle(color.NRGBA{R: 229, G: 234, B: 197, A: 200})
-	//overlay.Resize(pomodoro.window.Canvas().Size())
-	//pomodoro.bgImage.FillMode = canvas.ImageFillStretch
-	content = container.NewPadded(createUI())
+	overlay = canvas.NewRectangle(bgColor)
+	content = container.NewStack(overlay, createUI())
 
 	window.SetCloseIntercept(func() {
 		setting.Width = window.Canvas().Size().Width
@@ -237,6 +240,7 @@ func main() {
 			container.NewCenter(canvas.NewText("确定要关闭应用吗？", theme.TextColor())), func(confirmed bool) {
 				if confirmed {
 					window.Close()
+					settingsWindow.Close()
 				}
 			}, window)
 		closeDialog.Resize(fyne.NewSize(200, 150))
@@ -252,39 +256,6 @@ func main() {
 
 }
 
-func createTransparentImage(imgPath string, alpha uint8) *canvas.Image {
-	file, err := os.Open(imgPath)
-	if err != nil {
-		return canvas.NewImageFromResource(theme.FyneLogo())
-	}
-	defer file.Close()
-
-	// 解码图像
-	srcImg, _, err := image.Decode(file)
-	if err != nil {
-		return canvas.NewImageFromResource(theme.FyneLogo())
-	}
-
-	bounds := srcImg.Bounds()
-
-	transparentImg := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-
-	for y := 0; y < bounds.Dy(); y++ {
-		for x := 0; x < bounds.Dx(); x++ {
-			origColor := srcImg.At(x, y)
-			r, g, b, _ := origColor.RGBA()
-			newColor := color.NRGBA{
-				R: uint8(r >> 8),
-				G: uint8(g >> 8),
-				B: uint8(b >> 8),
-				A: alpha, // 设置透明度
-			}
-			transparentImg.Set(x, y, newColor)
-		}
-	}
-	return canvas.NewImageFromImage(transparentImg)
-}
-
 func loadResource(path string) (fyne.Resource, error) {
 	data, err := assets.ReadFile(path)
 	if err != nil {
@@ -293,123 +264,30 @@ func loadResource(path string) (fyne.Resource, error) {
 	return fyne.NewStaticResource(filepath.Base(path), data), nil
 }
 
-// 打开设置窗口的方法
 func showSettingsWindow() {
-	// 如果设置窗口已存在，则将其置于最前
-	if settingsWindow != nil {
-		settingsWindow.RequestFocus()
-		return
-	}
 
-	// 创建新的设置窗口
 	settingsWindow = myApp.NewWindow("设置")
 	settingsWindow.SetCloseIntercept(func() {
-		settingsWindow.Hide() // 隐藏而不是关闭，以便保留状态
+		saveSettings()
+		updateTimeColor()
+		settingsWindow.Close()
 	})
 
-	// 设置窗口大小
-	settingsWindow.Resize(fyne.NewSize(500, 500))
+	settingsWindow.Resize(fyne.NewSize(500, 400))
 
-	// 创建设置内容
 	settingsContent := createSettingsContent()
 
-	// 创建标题栏（用于拖动）
-	//titleBar := p.createSettingsTitleBar()
-
-	// 创建按钮区域
-	buttonArea := container.NewHBox(
-		layout.NewSpacer(),
-		widget.NewButton("取消", func() {
-			settingsWindow.Hide()
-		}),
-		widget.NewButton("保存", func() {
-			saveSettings()
-			settingsWindow.Hide()
-			window.Resize(fyne.NewSize(setting.Width, setting.Height))
-		}),
-		widget.NewButton("保存并应用", func() {
-			saveSettings()
-			window.Resize(fyne.NewSize(setting.Width, setting.Height))
-			// 可以添加其他应用设置的操作
-		}),
-	)
-
 	// 完整布局
-	content := container.NewBorder(
-		//titleBar,   // 顶部标题栏
-		buttonArea, // 底部按钮
-		nil, nil,
-		container.NewVScroll(settingsContent), // 可滚动的设置内容
-	)
+	content := container.NewVScroll(settingsContent)
 
 	settingsWindow.SetContent(content)
 	settingsWindow.Show()
 }
 
-// 创建设置窗口的标题栏（可拖动）
-//func (p *MyApp) createSettingsTitleBar() fyne.CanvasObject {
-//	titleLabel := widget.NewLabel("设置")
-//	titleLabel.TextStyle.Bold = true
-//
-//	closeButton := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
-//		if p.settingsWindow != nil {
-//			p.settingsWindow.Hide()
-//		}
-//	})
-//	closeButton.Importance = widget.LowImportance
-//
-//	titleBar := container.NewHBox(
-//		titleLabel,
-//		layout.NewSpacer(),
-//		closeButton,
-//	)
-//
-//	// 添加半透明背景
-//	titleBg := canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 230})
-//	titleContainer := container.NewMax(titleBg, titleBar)
-//
-//	// 实现拖动功能
-//	var dragStart fyne.Position
-//	titleContainer.OnTapped = func(event *fyne.PointEvent) {
-//		dragStart = event.Position
-//	}
-//	titleContainer.AddListener(&fyne.DragListener{
-//		Dragged: func(event *fyne.DragEvent) {
-//			if p.settingsWindow == nil {
-//				return
-//			}
-//			deltaX := event.PointEvent.Position.X - dragStart.X
-//			deltaY := event.PointEvent.Position.Y - dragStart.Y
-//			pos := p.settingsWindow.Position()
-//			p.settingsWindow.Move(fyne.NewPos(pos.X+deltaX, pos.Y+deltaY))
-//		},
-//	})
-//
-//	return titleContainer
-//}
-
 func createUI() fyne.CanvasObject {
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
-			//p.showSettingsWindow()
-			setting.Width = window.Canvas().Size().Width
-			setting.Height = window.Canvas().Size().Height
-			window.Resize(fyne.NewSize(500, 400))
-			settingsDialog := dialog.NewCustomConfirm(
-				"设置",
-				"保存",
-				"取消",
-				createSettingsContent(),
-				func(confirmed bool) {
-					if confirmed {
-						saveSettings()
-					}
-					window.Resize(fyne.NewSize(setting.Width, setting.Height))
-				},
-				window,
-			)
-			settingsDialog.Resize(fyne.NewSize(500, 400))
-			settingsDialog.Show()
+			showSettingsWindow()
 		}),
 	)
 
@@ -541,7 +419,6 @@ func startTimer() {
 				timerComplete()
 				return
 			}
-
 			newText := formatDuration(remaining)
 			fyne.Do(func() {
 				updateTimeText(newText)
@@ -615,6 +492,7 @@ func transitionState(newState state) {
 func showNotification() {
 	var title, message string
 	var soundFile string
+	newText := formatDuration(remaining)
 	if currentState == stateWorking {
 		title = "工作完成了！"
 		message = "辛苦了，休息一会吧！"
@@ -623,12 +501,18 @@ func showNotification() {
 		updatePomodoro()
 		saveTaskRecord()
 		checkAndRefreshToday()
+		newText = formatDuration(time.Duration(setting.BreakTime) * time.Minute)
 	} else {
 		title = "继续工作了！"
 		message = "休息结束，要工作了，加油！"
 		nextState = stateWorking
 		soundFile = setting.WorkInformPath
+		newText = formatDuration(time.Duration(setting.WorkTime) * time.Minute)
 	}
+
+	fyne.Do(func() {
+		updateTimeText(newText)
+	})
 
 	go playSound(soundFile)
 
@@ -652,7 +536,10 @@ func showNotification() {
 	informDialog.Show()
 
 	fyne.Do(func() {
-		ensureFocus()
+		window.RequestFocus()
+
+		time.Sleep(1000 * time.Millisecond)
+		window.RequestFocus()
 	})
 }
 
@@ -725,6 +612,7 @@ func loadSettings() {
 		BreakColorText: colorToHex(breakColor),
 		NoteColorText:  colorToHex(noteColor),
 		StatColorText:  colorToHex(statColor),
+		BgColorText:    colorToHex(bgColor),
 		Width:          430,
 		Height:         238,
 	}
@@ -759,6 +647,9 @@ func loadSettings() {
 	if setting.NoteColorText == "" {
 		setting.NoteColorText = colorToHex(noteColor)
 	}
+	if setting.BgColorText == "" {
+		setting.BgColorText = colorToHex(bgColor)
+	}
 
 }
 
@@ -774,19 +665,38 @@ func saveSettings() {
 	}
 }
 
+func updateTimeColor() {
+	if currentState == stateWorking || currentState == stateIdle || (currentState == statePause && nextState == stateWorking) {
+		if timeText.Color != workColor {
+			timeText.Color = workColor
+			timeText.Refresh()
+		}
+	} else {
+		if timeText.Color != breakColor {
+			timeText.Color = breakColor
+			timeText.Refresh()
+		}
+	}
+}
+
 func createSettingsContent() fyne.CanvasObject {
 	var formItems []*widget.FormItem
 
+	// 工作时间设置
 	workEntry := newFixedWidthEntry(100, 36)
 	workEntry.Objects[0].(*widget.Entry).SetText(strconv.Itoa(setting.WorkTime))
 	workEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
 		if val, err := strconv.Atoi(text); err == nil {
 			setting.WorkTime = val
 		}
+		if currentState == stateIdle {
+			resetTimer()
+		}
 	}
 	workContainer := container.NewHBox(workEntry, widget.NewLabel("分钟"))
 	formItems = append(formItems, widget.NewFormItem("番茄时钟:", workContainer))
 
+	// 休息时间设置
 	breakEntry := newFixedWidthEntry(100, 36)
 	breakEntry.Objects[0].(*widget.Entry).SetText(strconv.Itoa(setting.BreakTime))
 	breakEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
@@ -797,48 +707,136 @@ func createSettingsContent() fyne.CanvasObject {
 	breakContainer := container.NewHBox(breakEntry, widget.NewLabel("分钟"))
 	formItems = append(formItems, widget.NewFormItem("休息时钟:", breakContainer))
 
+	//背景色设置
+	bgColorEntry := newFixedWidthEntry(100, 36)
+	bgColorEntry.Objects[0].(*widget.Entry).SetText(setting.BgColorText)
+	bgColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
+		if toColor, err := hexToColor(text); err == nil {
+			bgColor = toColor
+			setting.BgColorText = text
+			overlay.FillColor = toColor
+			overlay.Refresh()
+		}
+	}
+	resetBgColorBtn := widget.NewButton("重置", func() {
+		bgColor = defaultBgColor
+		setting.BgColorText = colorToHex(defaultBgColor)
+		bgColorEntry.Objects[0].(*widget.Entry).SetText(setting.BgColorText)
+		overlay.FillColor = defaultBgColor
+		overlay.Refresh()
+	})
+	resetBgColorContainer := container.NewHBox(
+		bgColorEntry,
+		layout.NewSpacer(),
+		resetBgColorBtn,
+	)
+	formItems = append(formItems, widget.NewFormItem("背景底色:", resetBgColorContainer))
+
+	// 番茄钟颜色设置
 	workColorEntry := newFixedWidthEntry(100, 36)
 	workColorEntry.Objects[0].(*widget.Entry).SetText(setting.WorkColorText)
 	workColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
-		workColor, _ = hexToColor(text)
-		setting.WorkColorText = text
-		if currentState == stateWorking {
+		if toColor, err := hexToColor(text); err == nil {
+			workColor = toColor
+			setting.WorkColorText = text
 			timeText.Color = workColor
+			timeText.Refresh()
 		}
 	}
-	formItems = append(formItems, widget.NewFormItem("番茄钟色:", workColorEntry))
+	resetWorkColorBtn := widget.NewButton("重置", func() {
+		workColor = defaultWorkColor
+		setting.WorkColorText = colorToHex(defaultWorkColor)
+		timeText.Color = workColor
+		timeText.Refresh()
+		workColorEntry.Objects[0].(*widget.Entry).SetText(setting.WorkColorText)
+	})
+	resetWorkColorContainer := container.NewHBox(
+		workColorEntry,
+		layout.NewSpacer(),
+		resetWorkColorBtn,
+	)
+	formItems = append(formItems, widget.NewFormItem("番茄钟色:", resetWorkColorContainer))
 
+	// 休息钟颜色设置
 	breakColorEntry := newFixedWidthEntry(100, 36)
 	breakColorEntry.Objects[0].(*widget.Entry).SetText(setting.BreakColorText)
 	breakColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
-		breakColor, _ = hexToColor(text)
-		setting.BreakColorText = text
-		if currentState != stateWorking {
+		if toColor, err := hexToColor(text); err == nil {
+			breakColor = toColor
+			setting.BreakColorText = text
 			timeText.Color = breakColor
+			timeText.Refresh()
 		}
 	}
-	formItems = append(formItems, widget.NewFormItem("休息钟色:", breakColorEntry))
+	resetBreakColorBtn := widget.NewButton("重置", func() {
+		breakColor = defaultBreakColor
+		setting.BreakColorText = colorToHex(defaultBreakColor)
+		timeText.Color = breakColor
+		timeText.Refresh()
+		breakColorEntry.Objects[0].(*widget.Entry).SetText(setting.BreakColorText)
+	})
+	resetBreakColorContainer := container.NewHBox(
+		breakColorEntry,
+		layout.NewSpacer(),
+		resetBreakColorBtn,
+	)
+	formItems = append(formItems, widget.NewFormItem("休息钟色:", resetBreakColorContainer))
 
+	// 状态文字颜色设置
 	NoteColorEntry := newFixedWidthEntry(100, 36)
 	NoteColorEntry.Objects[0].(*widget.Entry).SetText(setting.NoteColorText)
 	NoteColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
-		setting.NoteColorText = text
-		noteColor, _ = hexToColor(text)
-		stateText.Color = noteColor
+		if toColor, err := hexToColor(text); err == nil {
+			setting.NoteColorText = text
+			noteColor = toColor
+			stateText.Color = noteColor
+			stateText.Refresh()
+		}
 	}
-	formItems = append(formItems, widget.NewFormItem("状态字色:", NoteColorEntry))
+	resetNoteColorBtn := widget.NewButton("重置", func() {
+		noteColor = defaultNoteColor
+		setting.NoteColorText = colorToHex(defaultStatColor)
+		stateText.Color = noteColor
+		stateText.Refresh()
+		NoteColorEntry.Objects[0].(*widget.Entry).SetText(setting.NoteColorText)
+	})
+	resetNoteColorContainer := container.NewHBox(
+		NoteColorEntry,
+		layout.NewSpacer(),
+		resetNoteColorBtn,
+	)
+	formItems = append(formItems, widget.NewFormItem("状态字色:", resetNoteColorContainer))
 
+	// 统计文字颜色设置
 	statColorEntry := newFixedWidthEntry(100, 36)
 	statColorEntry.Objects[0].(*widget.Entry).SetText(setting.StatColorText)
 	statColorEntry.Objects[0].(*widget.Entry).OnChanged = func(text string) {
-		setting.StatColorText = text
-		statColor, _ = hexToColor(text)
+		if toColor, err := hexToColor(text); err == nil {
+			setting.StatColorText = text
+			statColor = toColor
+			statTimeText.Color = statColor
+			statCountText.Color = statColor
+			statTimeText.Refresh()
+			statCountText.Refresh()
+		}
+	}
+	resetStatColorBtn := widget.NewButton("重置", func() {
+		statColor = defaultStatColor
+		setting.StatColorText = colorToHex(defaultStatColor)
 		statTimeText.Color = statColor
 		statCountText.Color = statColor
-	}
-	formItems = append(formItems, widget.NewFormItem("统计字色:", statColorEntry))
+		statColorEntry.Objects[0].(*widget.Entry).SetText(setting.StatColorText)
+		statTimeText.Refresh()
+		statCountText.Refresh()
+	})
+	resetStatColorContainer := container.NewHBox(
+		statColorEntry,
+		layout.NewSpacer(),
+		resetStatColorBtn,
+	)
+	formItems = append(formItems, widget.NewFormItem("统计字色:", resetStatColorContainer))
 
-	// 上课铃设置
+	// 通知铃声设置
 	setting.workPathText = widget.NewLabel("未设置")
 	if setting.WorkInformPath != "" {
 		setting.workPathText.SetText(truncatePath(setting.WorkInformPath, 50))
@@ -854,52 +852,25 @@ func createSettingsContent() fyne.CanvasObject {
 	// 创建表单
 	form := widget.NewForm(formItems...)
 
-	// 添加垂直间距
-	return container.NewVBox(form)
-}
+	// 创建按钮区域
+	saveButton := widget.NewButton("关闭", func() {
+		saveSettings()
+		updateTimeColor()
+		settingsWindow.Close()
+	})
 
-//func createSettingsContent2() fyne.CanvasObject {
-//	workEntry := widget.NewEntry()
-//	workEntry.SetText(strconv.Itoa(setting.WorkTime))
-//	workEntry.OnChanged = func(text string) {
-//		if val, err := strconv.Atoi(text); err == nil {
-//			setting.WorkTime = val
-//		}
-//	}
-//
-//	breakEntry := widget.NewEntry()
-//	breakEntry.SetText(strconv.Itoa(setting.BreakTime))
-//	breakEntry.OnChanged = func(text string) {
-//		if val, err := strconv.Atoi(text); err == nil {
-//			setting.BreakTime = val
-//		}
-//	}
-//
-//
-//	setting.workPathText = widget.NewLabel("未设置")
-//	if setting.WorkInformPath != "" {
-//		setting.workPathText.SetText(truncatePath(setting.WorkInformPath, 30))
-//	}
-//	selectWorkInformBtn := widget.NewButton("更改", selectWorkFile)
-//
-//	setting.breakPathText = widget.NewLabel("未设置")
-//	if setting.BreakInformPath != "" {
-//		setting.breakPathText.SetText(truncatePath(setting.BreakInformPath, 30))
-//	}
-//	selectBreakInformBtn := widget.NewButton("更改", selectBreakFile)
-//
-//	return container.NewVBox(
-//		container.NewHBox(widget.NewLabel("番茄钟:"), workEntry, widget.NewLabel("分钟")),
-//		layout.NewSpacer(),
-//		container.NewHBox(widget.NewLabel("休息钟:"), breakEntry, widget.NewLabel("分钟")),
-//		layout.NewSpacer(),
-//		container.NewHBox(widget.NewLabel("背景图:"), setting.bgPathText, selectBgImgBtn),
-//		layout.NewSpacer(),
-//		container.NewHBox(widget.NewLabel("上课铃:"), setting.workPathText, selectWorkInformBtn),
-//		layout.NewSpacer(),
-//		container.NewHBox(widget.NewLabel("下课铃:"), setting.breakPathText, selectBreakInformBtn),
-//	)
-//}
+	buttonArea := container.NewHBox(
+		saveButton,
+	)
+
+	// 添加垂直间距和按钮区域
+	return container.NewVBox(
+		form,
+		container.NewCenter(
+			container.NewPadded(buttonArea),
+		),
+	)
+}
 
 func selectWorkFile() {
 	selectFile(func(filePath string) {
@@ -907,22 +878,6 @@ func selectWorkFile() {
 		setting.workPathText.SetText(truncatePath(filePath, 30))
 	}, "mp3")
 }
-
-//func selectBgImgFile() {
-//	selectFile(func(filePath string) {
-//		setting.BgImgPath = filePath
-//		setting.bgPathText.SetText(truncatePath(filePath, 30))
-//		content.Objects[0] = canvas.NewImageFromFile(setting.BgImgPath)
-//		content.Refresh()
-//	}, "img")
-//}
-
-//func selectBreakFile() {
-//	selectFile(func(filePath string) {
-//		setting.BreakInformPath = filePath
-//		setting.breakPathText.SetText(truncatePath(filePath, 30))
-//	}, "mp3")
-//}
 
 func selectFile(callback func(string), fType string) {
 	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
@@ -1064,23 +1019,6 @@ func getTotalWorkTimeByDate(date string) (int, error) {
 	var total int
 	err := db.QueryRow(DURATION_SQL, date).Scan(&total)
 	return total, err
-}
-
-func ensureFocus() {
-	// 延迟请求焦点
-	go func() {
-		// 第一次延迟
-		time.Sleep(200 * time.Millisecond)
-		window.RequestFocus()
-
-		// 第二次延迟（增加成功率）
-		time.Sleep(500 * time.Millisecond)
-		window.RequestFocus()
-
-		// 第三次延迟（针对特别顽固的情况）
-		time.Sleep(1000 * time.Millisecond)
-		window.RequestFocus()
-	}()
 }
 
 func playSound(filePath string) {
