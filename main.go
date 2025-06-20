@@ -27,6 +27,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -66,35 +67,36 @@ func initResources() {
 }
 
 var (
-	myApp                 fyne.App
-	window                fyne.Window
-	settingsWindow        fyne.Window
-	ticker                *time.Ticker
-	remaining             time.Duration
-	total                 time.Duration
-	totalRunningTime      time.Duration
-	startTime             time.Time
-	lastStartTime         time.Time
-	isRunning             bool
-	timeText              *canvas.Text
-	stateText             *canvas.Text
-	statImage             *canvas.Image
-	statTimeText          *canvas.Text
-	statCountText         *canvas.Text
-	content               *fyne.Container
-	overlay               *canvas.Rectangle
-	doBar                 *widget.Toolbar
-	doBarAction           *widget.ToolbarAction
-	resetBar              *widget.Toolbar
-	setting               *settings
-	currentState          state
-	nextState             state
-	logger                *Logger
-	pomodoroCount         int
-	pomodoroTime          int
-	today                 string
-	db                    *sql.DB
-	closingSettingsWindow bool
+	myApp            fyne.App
+	window           fyne.Window
+	settingsWindow   fyne.Window
+	ticker           *time.Ticker
+	remaining        time.Duration
+	total            time.Duration
+	totalRunningTime time.Duration
+	startTime        time.Time
+	lastStartTime    time.Time
+	isRunning        bool
+	timeText         *canvas.Text
+	stateText        *canvas.Text
+	statImage        *canvas.Image
+	statTimeText     *canvas.Text
+	statCountText    *canvas.Text
+	content          *fyne.Container
+	overlay          *canvas.Rectangle
+	doBar            *widget.Toolbar
+	doBarAction      *widget.ToolbarAction
+	resetBar         *widget.Toolbar
+	setting          *settings
+	currentState     state
+	nextState        state
+	logger           *Logger
+	pomodoroCount    int
+	pomodoroTime     int
+	today            string
+	db               *sql.DB
+	settingsMutex    sync.Mutex
+	windowClosing    bool
 )
 
 const (
@@ -269,17 +271,22 @@ func loadResource(path string) (fyne.Resource, error) {
 }
 
 func showSettingsWindow() {
-	if settingsWindow != nil {
-		settingsWindow.Close()
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+
+	if windowClosing {
+		return
 	}
+
+	if settingsWindow != nil {
+		settingsWindow.Show()
+		settingsWindow.RequestFocus()
+		return
+	}
+
 	settingsWindow = myApp.NewWindow("设置")
 	settingsWindow.SetCloseIntercept(func() {
-		saveSettings()
-		if settingsWindow != nil {
-			settingsWindow.Close()
-			settingsWindow = nil
-		}
-		updateTimeColor()
+		closeSettingsWindow()
 	})
 
 	settingsWindow.Resize(fyne.NewSize(500, 400))
@@ -865,12 +872,7 @@ func createSettingsContent() fyne.CanvasObject {
 
 	// 创建按钮区域
 	saveButton := widget.NewButton("关闭", func() {
-		saveSettings()
-		if settingsWindow != nil {
-			settingsWindow.Close()
-			settingsWindow = nil
-		}
-		updateTimeColor()
+		closeSettingsWindow()
 	})
 
 	buttonArea := container.NewHBox(
@@ -884,6 +886,21 @@ func createSettingsContent() fyne.CanvasObject {
 			container.NewPadded(buttonArea),
 		),
 	)
+}
+
+func closeSettingsWindow() {
+	settingsMutex.Lock()
+	defer settingsMutex.Unlock()
+
+	windowClosing = true
+	defer func() { windowClosing = false }()
+
+	saveSettings()
+	if settingsWindow != nil {
+		settingsWindow.Close()
+		settingsWindow = nil
+	}
+	updateTimeColor()
 }
 
 func selectWorkFile() {
